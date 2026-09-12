@@ -1,36 +1,17 @@
-/* app/page.tsx */
-"use client";
+'use client';
 
-import { useEffect, useMemo, useState } from "react";
-import type {
-  ButtonHTMLAttributes,
-  ComponentType,
-  InputHTMLAttributes,
-  ReactNode,
-  TextareaHTMLAttributes,
-} from "react";
-import {
-  Activity,
-  BarChart3,
-  BookOpen,
-  CheckCircle2,
-  Circle,
-  Dumbbell,
-  Home as HomeIcon,
-  Plus,
-  Trash2,
-  Wallet,
-  ArrowLeft,
+import { useState, useEffect } from "react";
+import { 
+  ArrowLeft, Activity, Dumbbell, BookOpen, Wallet, Plus, Trash2, 
+  CheckCircle2, Circle, Home as HomeIcon, BarChart3 
 } from "lucide-react";
 
-type View = "home" | "hoops" | "workout" | "study" | "money" | "chores" | "stats";
-
+// ---- palette (hardwood court + notebook ink) ----
 const bg = "#12141C";
 const surface = "#1A1D27";
-const line = "rgba(236,237,242,0.10)";
+const line = "rgba(236,237,242,0.08)";
 const ink = "#ECEDF2";
 const muted = "#868C9C";
-
 const accents = {
   hoops: "#E07B39",
   workout: "#5FA97A",
@@ -40,109 +21,69 @@ const accents = {
   stats: "#B08FD8",
 };
 
-const STORAGE_PREFIX = "note-it-v2:";
+// Storage Helpers (ใช้ localStorage แทนเพื่อรองรับการทำงานใน Browser)
+async function loadList(key: string) {
+  try {
+    const res = localStorage.getItem(key);
+    return res ? JSON.parse(res) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveList(key: string, list: any) {
+  try {
+    localStorage.setItem(key, JSON.stringify(list));
+  } catch (e) {
+    console.error("save failed", e);
+  }
+}
 
 function uid() {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-function todayISO() {
-  const d = new Date();
-  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 10);
-}
-
-function shortDate(iso: string) {
-  if (!iso) return "";
-  const d = new Date(`${iso}T00:00:00`);
-  return d.toLocaleDateString("th-TH", { day: "numeric", month: "short" });
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
 function thaiDate(iso: string) {
   if (!iso) return "";
-  const d = new Date(`${iso}T00:00:00`);
-  return d.toLocaleDateString("th-TH", {
-    day: "numeric",
-    month: "short",
-    year: "2-digit",
-  });
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" });
 }
 
-function loadList<T>(key: string, fallback: T[] = []): T[] {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_PREFIX + key);
-    if (!raw) return fallback;
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : fallback;
-  } catch {
-    return fallback;
-  }
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
 }
 
-function saveList<T>(key: string, list: T[]) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(list));
-  } catch (error) {
-    console.error("บันทึกข้อมูลไม่สำเร็จ", error);
-  }
-}
+const WEEKDAY_NAMES = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์", "อาทิตย์"];
 
-const WEEKDAY_NAMES = [
-  "จันทร์",
-  "อังคาร",
-  "พุธ",
-  "พฤหัสบดี",
-  "ศุกร์",
-  "เสาร์",
-  "อาทิตย์",
-];
-
-type WeekDay = {
-  date: string;
-  dayName: string;
-};
-
-function getWeekDates(): WeekDay[] {
+function getWeekDates() {
   const now = new Date();
-  const day = now.getDay();
+  const day = now.getDay(); // 0 = Sun .. 6 = Sat
   const diffToMonday = day === 0 ? -6 : 1 - day;
   const monday = new Date(now);
-  monday.setHours(0, 0, 0, 0);
   monday.setDate(now.getDate() + diffToMonday);
-
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
-    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
-    return {
-      date: local.toISOString().slice(0, 10),
-      dayName: WEEKDAY_NAMES[i],
-    };
+    return { date: d.toISOString().slice(0, 10), dayName: WEEKDAY_NAMES[i] };
   });
 }
 
-function saveAndReturn<T>(key: string, next: T[]): T[] {
-  saveList(key, next);
-  return next;
+function shortDate(iso: string) {
+  if (!iso) return "";
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("th-TH", { day: "numeric", month: "short" });
 }
 
-function TopBar({
-  title,
-  accent,
-  onBack,
-}: {
-  title: string;
-  accent: string;
-  onBack: () => void;
-}) {
+// UI Components
+function TopBar({ title, accent, onBack }: { title: string; accent: string; onBack: () => void }) {
   return (
-    <div className="mb-6 flex items-center gap-3">
+    <div className="flex items-center gap-3 mb-6">
       <button
         onClick={onBack}
-        className="rounded-full p-2 transition-opacity hover:opacity-70"
+        className="p-2 rounded-full transition-colors"
         style={{ color: muted }}
+        onMouseEnter={(e) => (e.currentTarget.style.color = ink)}
+        onMouseLeave={(e) => (e.currentTarget.style.color = muted)}
         aria-label="กลับ"
       >
         <ArrowLeft size={20} />
@@ -150,24 +91,15 @@ function TopBar({
       <h1 className="text-xl font-bold tracking-tight" style={{ color: ink }}>
         {title}
       </h1>
-      <div
-        className="ml-auto h-2 w-2 rounded-full"
-        style={{ background: accent }}
-      />
+      <div className="ml-auto w-2 h-2 rounded-full" style={{ background: accent }} />
     </div>
   );
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="mb-4 block">
-      <span className="mb-1.5 block text-xs" style={{ color: muted }}>
+    <label className="block mb-4">
+      <span className="block text-xs mb-1.5" style={{ color: muted }}>
         {label}
       </span>
       {children}
@@ -175,80 +107,58 @@ function Field({
   );
 }
 
-function Underline({
-  accent,
-  ...props
-}: InputHTMLAttributes<HTMLInputElement> & { accent: string }) {
-  const [focused, setFocused] = useState(false);
+const inputBase: React.CSSProperties = {
+  width: "100%",
+  background: "transparent",
+  border: "none",
+  borderBottom: `1px solid ${line}`,
+  color: ink,
+  padding: "6px 2px",
+  outline: "none",
+  fontSize: "0.95rem",
+};
 
+function Underline(props: any) {
+  const [focused, setFocused] = useState(false);
+  const { accent, ...rest } = props;
   return (
     <input
-      {...props}
-      onFocus={(e) => {
-        setFocused(true);
-        props.onFocus?.(e);
-      }}
-      onBlur={(e) => {
-        setFocused(false);
-        props.onBlur?.(e);
-      }}
-      className={`w-full border-0 border-b bg-transparent px-0.5 py-1.5 outline-none ${
-        props.className ?? ""
-      }`}
+      {...rest}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
       style={{
-        color: ink,
+        ...inputBase,
         borderBottom: `1.5px solid ${focused ? accent : line}`,
         transition: "border-color 120ms",
-        ...props.style,
       }}
     />
   );
 }
 
-function TextareaUnderline({
-  accent,
-  ...props
-}: TextareaHTMLAttributes<HTMLTextAreaElement> & { accent: string }) {
+function TextareaUnderline(props: any) {
   const [focused, setFocused] = useState(false);
-
+  const { accent, ...rest } = props;
   return (
     <textarea
-      {...props}
-      onFocus={(e) => {
-        setFocused(true);
-        props.onFocus?.(e);
-      }}
-      onBlur={(e) => {
-        setFocused(false);
-        props.onBlur?.(e);
-      }}
-      className={`w-full resize-none border-0 border-b bg-transparent px-0.5 py-1.5 outline-none ${
-        props.className ?? ""
-      }`}
+      {...rest}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
       style={{
-        color: ink,
+        ...inputBase,
+        resize: "none",
         borderBottom: `1.5px solid ${focused ? accent : line}`,
         transition: "border-color 120ms",
-        ...props.style,
       }}
     />
   );
 }
 
-function AddButton({
-  accent,
-  children,
-  ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement> & {
-  accent: string;
-}) {
+function AddButton({ accent, children, ...rest }: any) {
   return (
     <button
       {...rest}
-      className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${
-        rest.className ?? ""
-      }`}
-      style={{ background: accent, color: bg, ...rest.style }}
+      className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-semibold text-sm mt-1"
+      style={{ background: accent, color: "#12141C" }}
     >
       <Plus size={16} strokeWidth={2.5} />
       {children}
@@ -256,31 +166,20 @@ function AddButton({
   );
 }
 
-function Empty({ text }: { text: string }) {
-  return (
-    <p className="py-10 text-center text-sm" style={{ color: muted }}>
-      {text}
-    </p>
-  );
-}
-
-function EntryRow({
-  children,
-  onDelete,
-}: {
-  children: ReactNode;
-  onDelete: () => void;
-}) {
+function EntryRow({ children, onDelete }: { children: React.ReactNode; onDelete: () => void }) {
+  const [hover, setHover] = useState(false);
   return (
     <div
       className="flex items-start justify-between gap-3 py-3.5"
       style={{ borderBottom: `1px solid ${line}` }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
     >
-      <div className="min-w-0 flex-1">{children}</div>
+      <div className="flex-1 min-w-0">{children}</div>
       <button
         onClick={onDelete}
-        className="shrink-0 rounded p-1"
-        style={{ color: muted }}
+        style={{ color: hover ? "#D9695F" : "transparent" }}
+        className="p-1 shrink-0 transition-colors"
         aria-label="ลบรายการนี้"
       >
         <Trash2 size={15} />
@@ -289,948 +188,547 @@ function EntryRow({
   );
 }
 
-/* ---------------- Home ---------------- */
-
-function Home({ onSelect }: { onSelect: (view: View) => void }) {
-  const tiles: {
-    key: View;
-    icon: ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
-    label: string;
-    sub: string;
-    accent: string;
-  }[] = [
-    {
-      key: "hoops",
-      icon: Activity,
-      label: "ซ้อมบาส",
-      sub: "บันทึกการซ้อม ยิงเข้า",
-      accent: accents.hoops,
-    },
-    {
-      key: "workout",
-      icon: Dumbbell,
-      label: "ออกกำลังกาย",
-      sub: "วิ่ง เวท โยคะ และอื่น ๆ",
-      accent: accents.workout,
-    },
-    {
-      key: "study",
-      icon: BookOpen,
-      label: "จดการเรียน",
-      sub: "เช็กงานค้างแยกตามวิชา",
-      accent: accents.study,
-    },
-    {
-      key: "money",
-      icon: Wallet,
-      label: "รายรับ-รายจ่าย",
-      sub: "เงินเข้า เงินออก ยอดคงเหลือ",
-      accent: accents.money,
-    },
-    {
-      key: "chores",
-      icon: HomeIcon,
-      label: "งานบ้าน",
-      sub: "เช็กงานบ้านแต่ละวัน",
-      accent: accents.chores,
-    },
-    {
-      key: "stats",
-      icon: BarChart3,
-      label: "สรุปสัปดาห์",
-      sub: "ภาพรวมทุกหมวด 7 วัน",
-      accent: accents.stats,
-    },
-  ];
-
+function Empty({ text }: { text: string }) {
   return (
-    <main className="mx-auto w-full max-w-md px-6 pb-10 pt-14">
-      <p className="mb-1 text-sm" style={{ color: muted }}>
-        วันนี้อยากจดอะไร
-      </p>
-      <h1 className="mb-9 text-3xl font-black tracking-tight" style={{ color: ink }}>
-        จดไว้
-      </h1>
-
-      <div className="grid grid-cols-2 gap-3.5">
-        {tiles.map((tile) => {
-          const Icon = tile.icon;
-          return (
-            <button
-              key={tile.key}
-              onClick={() => onSelect(tile.key)}
-              className="flex min-h-[148px] flex-col justify-between rounded-2xl p-4 text-left transition-transform active:scale-[0.97]"
-              style={{ background: surface, border: `1px solid ${line}` }}
-            >
-              <Icon size={22} color={tile.accent} strokeWidth={2} />
-              <div>
-                <div className="mb-1 text-sm font-semibold" style={{ color: ink }}>
-                  {tile.label}
-                </div>
-                <div className="text-xs leading-snug" style={{ color: muted }}>
-                  {tile.sub}
-                </div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </main>
+    <p className="text-sm py-10 text-center" style={{ color: muted }}>
+      {text}
+    </p>
   );
 }
 
-/* ---------------- Basketball ---------------- */
+// Main Screens
+function Home({ onSelect }: { onSelect: (key: string) => void }) {
+  const tiles = [
+    { key: "hoops", icon: Activity, label: "ซ้อมบาส", sub: "บันทึกการซ้อม ยิง เข้า", accent: accents.hoops },
+    { key: "workout", icon: Dumbbell, label: "ออกกำลังกาย", sub: "วิ่ง เวท โยคะ และอื่นๆ", accent: accents.workout },
+    { key: "study", icon: BookOpen, label: "จดการเรียน", sub: "เช็กงานค้างแยกตามวิชา", accent: accents.study },
+    { key: "money", icon: Wallet, label: "รายรับ-รายจ่าย", sub: "เงินเข้า เงินออก ยอดคงเหลือ", accent: accents.money },
+    { key: "chores", icon: HomeIcon, label: "งานบ้าน", sub: "เช็กงานบ้านแต่ละวันในสัปดาห์", accent: accents.chores },
+    { key: "stats", icon: BarChart3, label: "สรุปสัปดาห์", sub: "ภาพรวมทุกหมวดทั้ง 7 วัน", accent: accents.stats },
+  ];
 
-type HoopDay = {
-  id: string;
-  date: string;
-  dayName: string;
-  made: string;
-  attempts: string;
-  note: string;
-  extra?: boolean;
-};
+  return (
+    <div className="w-full max-w-md mx-auto px-6 pt-14 pb-10">
+      <p className="text-sm mb-1" style={{ color: muted }}>วันนี้อยากจดอะไร</p>
+      <h1 className="text-3xl font-black tracking-tight mb-9" style={{ color: ink }}>จดไว้</h1>
+      <div className="grid grid-cols-2 gap-3.5">
+        {tiles.map((t) => (
+          <button
+            key={t.key}
+            onClick={() => onSelect(t.key)}
+            className="text-left rounded-2xl p-4 flex flex-col gap-6 transition-transform active:scale-[0.97]"
+            style={{ background: surface, border: `1px solid ${line}`, minHeight: 148 }}
+          >
+            <t.icon size={22} color={t.accent} strokeWidth={2} />
+            <div>
+              <div className="font-semibold text-sm mb-1" style={{ color: ink }}>{t.label}</div>
+              <div className="text-xs leading-snug" style={{ color: muted }}>{t.sub}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function HoopsScreen({ onBack }: { onBack: () => void }) {
   const accent = accents.hoops;
-  const [days, setDays] = useState<HoopDay[]>([]);
+  const [days, setDays] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    const stored = loadList<HoopDay>("hoops-log");
-    const week = getWeekDates().map((w) => {
-      const existing = stored.find((e) => e.date === w.date && !e.extra);
-      return (
-        existing ?? {
-          id: uid(),
-          date: w.date,
-          dayName: w.dayName,
-          made: "",
-          attempts: "",
-          note: "",
-          extra: false,
-        }
-      );
+    loadList("hoops-log").then((stored) => {
+      const week = getWeekDates().map((w) => {
+        const existing = stored.find((e: any) => e.date === w.date && !e.extra);
+        return existing || { id: uid(), date: w.date, dayName: w.dayName, made: "", attempts: "", note: "", extra: false };
+      });
+      const extras = stored.filter((e: any) => e.extra);
+      setDays([...week, ...extras]);
+      setLoaded(true);
     });
-    setDays([...week, ...stored.filter((e) => e.extra)]);
-    setLoaded(true);
   }, []);
 
-  const updateDay = (id: string, patch: Partial<HoopDay>) => {
+  const updateDay = (id: string, patch: any) => {
     setDays((prev) => {
       const next = prev.map((d) => (d.id === id ? { ...d, ...patch } : d));
-      return saveAndReturn("hoops-log", next);
+      saveList("hoops-log", next);
+      return next;
     });
   };
 
   const addExtraDay = () => {
-    setDays((prev) =>
-      saveAndReturn("hoops-log", [
-        ...prev,
-        {
-          id: uid(),
-          date: todayISO(),
-          dayName: "",
-          made: "",
-          attempts: "",
-          note: "",
-          extra: true,
-        },
-      ])
-    );
+    setDays((prev) => {
+      const next = [...prev, { id: uid(), date: todayISO(), dayName: "", made: "", attempts: "", note: "", extra: true }];
+      saveList("hoops-log", next);
+      return next;
+    });
   };
 
   const removeDay = (id: string) => {
-    setDays((prev) => saveAndReturn("hoops-log", prev.filter((d) => d.id !== id)));
+    setDays((prev) => {
+      const next = prev.filter((d) => d.id !== id);
+      saveList("hoops-log", next);
+      return next;
+    });
   };
 
   return (
-    <main className="mx-auto w-full max-w-md px-6 pb-10 pt-8">
+    <div className="w-full max-w-md mx-auto px-6 pt-8 pb-10">
       <TopBar title="ซ้อมบาส" accent={accent} onBack={onBack} />
-
       {loaded &&
         days.map((d) => {
-          const attempts = Number(d.attempts);
-          const made = Number(d.made);
-          const pct = attempts > 0 ? Math.round((made / attempts) * 100) : null;
-
+          const pct = Number(d.attempts) > 0 ? Math.round((Number(d.made) / Number(d.attempts)) * 100) : null;
           return (
-            <section
-              key={d.id}
-              className="mb-3 rounded-2xl p-4"
-              style={{ background: surface, border: `1px solid ${line}` }}
-            >
-              <div className="mb-3 flex items-center gap-2">
+            <div key={d.id} className="rounded-2xl p-4 mb-3" style={{ background: surface, border: `1px solid ${line}` }}>
+              <div className="flex items-center gap-2 mb-3">
                 {d.extra ? (
                   <input
                     type="date"
                     value={d.date}
                     onChange={(e) => updateDay(d.id, { date: e.target.value })}
-                    className="bg-transparent text-sm font-semibold outline-none"
-                    style={{ color: ink }}
+                    style={{ background: "transparent", color: ink, border: "none", outline: "none", fontSize: "0.85rem", fontWeight: 600 }}
                   />
                 ) : (
                   <>
-                    <span className="text-sm font-semibold" style={{ color: ink }}>
-                      วัน{d.dayName}
-                    </span>
-                    <span className="text-xs" style={{ color: muted }}>
-                      {shortDate(d.date)}
-                    </span>
+                    <span className="font-semibold text-sm" style={{ color: ink }}>วัน{d.dayName}</span>
+                    <span className="text-xs" style={{ color: muted }}>{shortDate(d.date)}</span>
                   </>
                 )}
-
-                {pct !== null && (
-                  <span className="ml-auto text-xs font-medium" style={{ color: accent }}>
-                    ยิง {pct}%
-                  </span>
-                )}
-
+                {pct !== null && <span className="text-xs font-medium ml-auto" style={{ color: accent }}>ยิง {pct}%</span>}
                 {d.extra && (
-                  <button
-                    onClick={() => removeDay(d.id)}
-                    className="rounded p-1"
-                    style={{ color: muted }}
-                    aria-label="ลบวันนี้"
-                  >
+                  <button onClick={() => removeDay(d.id)} className="p-1" style={{ color: muted }} aria-label="ลบวันนี้">
                     <Trash2 size={14} />
                   </button>
                 )}
               </div>
-
               <div className="grid grid-cols-2 gap-x-4">
                 <Field label="ยิงเข้า">
-                  <Underline
-                    accent={accent}
-                    type="number"
-                    min="0"
-                    value={d.made}
-                    onChange={(e) => updateDay(d.id, { made: e.target.value })}
-                    placeholder="0"
-                  />
+                  <Underline accent={accent} type="number" min="0" value={d.made} onChange={(e: any) => updateDay(d.id, { made: e.target.value })} placeholder="0" />
                 </Field>
                 <Field label="ยิงทั้งหมด">
-                  <Underline
-                    accent={accent}
-                    type="number"
-                    min="0"
-                    value={d.attempts}
-                    onChange={(e) => updateDay(d.id, { attempts: e.target.value })}
-                    placeholder="0"
-                  />
+                  <Underline accent={accent} type="number" min="0" value={d.attempts} onChange={(e: any) => updateDay(d.id, { attempts: e.target.value })} placeholder="0" />
                 </Field>
               </div>
-
               <Field label="ทำอะไรบ้าง">
-                <TextareaUnderline
-                  accent={accent}
-                  rows={2}
-                  value={d.note}
-                  onChange={(e) => updateDay(d.id, { note: e.target.value })}
-                  placeholder="เช่น ชู้ตสามคะแนน ฟุตเวิร์ก ฝึกเลี้ยงบอล"
-                />
+                <TextareaUnderline accent={accent} rows={2} value={d.note} onChange={(e: any) => updateDay(d.id, { note: e.target.value })} placeholder="เช่น ซ้อมชู้ตสามคะแนน วิ่งฟุตเวิร์ก" />
               </Field>
-            </section>
+            </div>
           );
         })}
-
       <button
         onClick={addExtraDay}
-        className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold"
+        className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-semibold text-sm mt-1"
         style={{ border: `1px dashed ${line}`, color: muted }}
       >
-        <Plus size={16} strokeWidth={2.5} />
-        เพิ่มวัน
+        <Plus size={16} strokeWidth={2.5} /> เพิ่มวัน
       </button>
-    </main>
+    </div>
   );
 }
 
-/* ---------------- Workout ---------------- */
-
-type Move = { id: string; move: string; sets: string; reps: string };
-type WorkoutDay = {
-  id: string;
-  date: string;
-  dayName: string;
-  extra?: boolean;
-  moves: Move[];
-};
-
-function newMove(): Move {
+function newMove() {
   return { id: uid(), move: "", sets: "", reps: "" };
 }
 
 function WorkoutScreen({ onBack }: { onBack: () => void }) {
   const accent = accents.workout;
-  const [days, setDays] = useState<WorkoutDay[]>([]);
+  const [days, setDays] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    const stored = loadList<WorkoutDay>("workout-log");
-    const week = getWeekDates().map((w) => {
-      const existing = stored.find((e) => e.date === w.date && !e.extra);
-      return (
-        existing ?? {
-          id: uid(),
-          date: w.date,
-          dayName: w.dayName,
-          extra: false,
-          moves: [newMove()],
-        }
-      );
+    loadList("workout-log").then((stored) => {
+      const week = getWeekDates().map((w) => {
+        const existing = stored.find((e: any) => e.date === w.date && !e.extra);
+        return existing || { id: uid(), date: w.date, dayName: w.dayName, extra: false, moves: [newMove()] };
+      });
+      const extras = stored.filter((e: any) => e.extra);
+      setDays([...week, ...extras]);
+      setLoaded(true);
     });
-    setDays([...week, ...stored.filter((e) => e.extra)]);
-    setLoaded(true);
   }, []);
 
-  const updateDay = (dayId: string, patch: Partial<WorkoutDay>) => {
+  const updateDayDate = (dayId: string, value: string) => {
     setDays((prev) => {
-      const next = prev.map((d) => (d.id === dayId ? { ...d, ...patch } : d));
-      return saveAndReturn("workout-log", next);
+      const next = prev.map((d) => (d.id === dayId ? { ...d, date: value } : d));
+      saveList("workout-log", next);
+      return next;
     });
   };
 
-  const updateMove = (dayId: string, moveId: string, patch: Partial<Move>) => {
+  const updateMove = (dayId: string, moveId: string, patch: any) => {
     setDays((prev) => {
-      const next = prev.map((d) =>
-        d.id === dayId
-          ? {
-              ...d,
-              moves: d.moves.map((m) => (m.id === moveId ? { ...m, ...patch } : m)),
-            }
-          : d
-      );
-      return saveAndReturn("workout-log", next);
+      const next = prev.map((d) => (d.id === dayId ? { ...d, moves: d.moves.map((m: any) => (m.id === moveId ? { ...m, ...patch } : m)) } : d));
+      saveList("workout-log", next);
+      return next;
     });
   };
 
   const addMove = (dayId: string) => {
     setDays((prev) => {
-      const next = prev.map((d) =>
-        d.id === dayId ? { ...d, moves: [...d.moves, newMove()] } : d
-      );
-      return saveAndReturn("workout-log", next);
+      const next = prev.map((d) => (d.id === dayId ? { ...d, moves: [...d.moves, newMove()] } : d));
+      saveList("workout-log", next);
+      return next;
     });
   };
 
   const removeMove = (dayId: string, moveId: string) => {
     setDays((prev) => {
-      const next = prev.map((d) =>
-        d.id === dayId
-          ? { ...d, moves: d.moves.filter((m) => m.id !== moveId) }
-          : d
-      );
-      return saveAndReturn("workout-log", next);
+      const next = prev.map((d) => (d.id === dayId ? { ...d, moves: d.moves.filter((m: any) => m.id !== moveId) } : d));
+      saveList("workout-log", next);
+      return next;
     });
   };
 
   const addExtraDay = () => {
-    setDays((prev) =>
-      saveAndReturn("workout-log", [
-        ...prev,
-        {
-          id: uid(),
-          date: todayISO(),
-          dayName: "",
-          extra: true,
-          moves: [newMove()],
-        },
-      ])
-    );
+    setDays((prev) => {
+      const next = [...prev, { id: uid(), date: todayISO(), dayName: "", extra: true, moves: [newMove()] }];
+      saveList("workout-log", next);
+      return next;
+    });
   };
 
   const removeDay = (dayId: string) => {
-    setDays((prev) => saveAndReturn("workout-log", prev.filter((d) => d.id !== dayId)));
+    setDays((prev) => {
+      const next = prev.filter((d) => d.id !== dayId);
+      saveList("workout-log", next);
+      return next;
+    });
   };
 
   return (
-    <main className="mx-auto w-full max-w-md px-6 pb-10 pt-8">
+    <div className="w-full max-w-md mx-auto px-6 pt-8 pb-10">
       <TopBar title="ออกกำลังกาย" accent={accent} onBack={onBack} />
-
       {loaded &&
         days.map((d) => (
-          <section
-            key={d.id}
-            className="mb-3 rounded-2xl p-4"
-            style={{ background: surface, border: `1px solid ${line}` }}
-          >
-            <div className="mb-3 flex items-center gap-2">
+          <div key={d.id} className="rounded-2xl p-4 mb-3" style={{ background: surface, border: `1px solid ${line}` }}>
+            <div className="flex items-center gap-2 mb-3">
               {d.extra ? (
                 <input
                   type="date"
                   value={d.date}
-                  onChange={(e) => updateDay(d.id, { date: e.target.value })}
-                  className="bg-transparent text-sm font-semibold outline-none"
-                  style={{ color: ink }}
+                  onChange={(e) => updateDayDate(d.id, e.target.value)}
+                  style={{ background: "transparent", color: ink, border: "none", outline: "none", fontSize: "0.85rem", fontWeight: 600 }}
                 />
               ) : (
                 <>
-                  <span className="text-sm font-semibold" style={{ color: ink }}>
-                    วัน{d.dayName}
-                  </span>
-                  <span className="text-xs" style={{ color: muted }}>
-                    {shortDate(d.date)}
-                  </span>
+                  <span className="font-semibold text-sm" style={{ color: ink }}>วัน{d.dayName}</span>
+                  <span className="text-xs" style={{ color: muted }}>{shortDate(d.date)}</span>
                 </>
               )}
-
               {d.extra && (
-                <button
-                  onClick={() => removeDay(d.id)}
-                  className="ml-auto rounded p-1"
-                  style={{ color: muted }}
-                  aria-label="ลบวันนี้"
-                >
+                <button onClick={() => removeDay(d.id)} className="ml-auto p-1" style={{ color: muted }} aria-label="ลบวันนี้">
                   <Trash2 size={14} />
                 </button>
               )}
             </div>
-
-            {d.moves.map((m, idx) => (
-              <div
-                key={m.id}
-                className={idx > 0 ? "mt-4 border-t pt-4" : ""}
-                style={idx > 0 ? { borderColor: line } : undefined}
-              >
+            {d.moves.map((m: any, idx: number) => (
+              <div key={m.id} className={idx > 0 ? "pt-4 mt-4" : ""} style={idx > 0 ? { borderTop: `1px solid ${line}` } : undefined}>
                 <div className="flex items-start gap-2">
-                  <div className="min-w-0 flex-1">
+                  <div className="flex-1 min-w-0">
                     <Field label={idx === 0 ? "ท่าที่จะทำ" : `ท่าที่ ${idx + 1}`}>
-                      <Underline
-                        accent={accent}
-                        type="text"
-                        value={m.move}
-                        onChange={(e) => updateMove(d.id, m.id, { move: e.target.value })}
-                        placeholder="เช่น สควอท, วิ่ง, แพลงก์"
-                      />
+                      <Underline accent={accent} type="text" value={m.move} onChange={(e: any) => updateMove(d.id, m.id, { move: e.target.value })} placeholder="เช่น สควอท, วิ่ง, แพลงก์" />
                     </Field>
                   </div>
-
                   {d.moves.length > 1 && (
-                    <button
-                      onClick={() => removeMove(d.id, m.id)}
-                      className="mt-5 rounded p-1"
-                      style={{ color: muted }}
-                      aria-label="ลบท่านี้"
-                    >
+                    <button onClick={() => removeMove(d.id, m.id)} className="p-1 mt-5" style={{ color: muted }} aria-label="ลบท่านี้">
                       <Trash2 size={14} />
                     </button>
                   )}
                 </div>
-
                 <div className="grid grid-cols-2 gap-x-4">
                   <Field label="เซ็ต">
-                    <Underline
-                      accent={accent}
-                      type="number"
-                      min="0"
-                      value={m.sets}
-                      onChange={(e) => updateMove(d.id, m.id, { sets: e.target.value })}
-                      placeholder="3"
-                    />
+                    <Underline accent={accent} type="number" min="0" value={m.sets} onChange={(e: any) => updateMove(d.id, m.id, { sets: e.target.value })} placeholder="3" />
                   </Field>
                   <Field label="จำนวนครั้ง/เซ็ต">
-                    <Underline
-                      accent={accent}
-                      type="number"
-                      min="0"
-                      value={m.reps}
-                      onChange={(e) => updateMove(d.id, m.id, { reps: e.target.value })}
-                      placeholder="12"
-                    />
+                    <Underline accent={accent} type="number" min="0" value={m.reps} onChange={(e: any) => updateMove(d.id, m.id, { reps: e.target.value })} placeholder="12" />
                   </Field>
                 </div>
               </div>
             ))}
-
-            <button
-              onClick={() => addMove(d.id)}
-              className="mt-3 flex items-center gap-1.5 text-xs font-semibold"
-              style={{ color: accent }}
-            >
-              <Plus size={14} strokeWidth={2.5} />
-              เพิ่มท่า
+            <button onClick={() => addMove(d.id)} className="flex items-center gap-1.5 text-xs font-semibold mt-3" style={{ color: accent }}>
+              <Plus size={14} strokeWidth={2.5} /> เพิ่มท่า
             </button>
-          </section>
+          </div>
         ))}
-
-      <button
-        onClick={addExtraDay}
-        className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold"
-        style={{ border: `1px dashed ${line}`, color: muted }}
-      >
-        <Plus size={16} strokeWidth={2.5} />
-        เพิ่มวัน
+      <button onClick={addExtraDay} className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-semibold text-sm mt-1" style={{ border: `1px dashed ${line}`, color: muted }}>
+        <Plus size={16} strokeWidth={2.5} /> เพิ่มวัน
       </button>
-    </main>
+    </div>
   );
 }
 
-/* ---------------- Chores ---------------- */
-
-type Chore = { id: string; name: string; done: boolean };
-type ChoreDay = {
-  id: string;
-  date: string;
-  dayName: string;
-  extra?: boolean;
-  chores: Chore[];
-};
-
-function newChore(): Chore {
+function newChore() {
   return { id: uid(), name: "", done: false };
 }
 
 function ChoresScreen({ onBack }: { onBack: () => void }) {
   const accent = accents.chores;
-  const [days, setDays] = useState<ChoreDay[]>([]);
+  const [days, setDays] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    const stored = loadList<ChoreDay>("chores-log");
-    const week = getWeekDates().map((w) => {
-      const existing = stored.find((e) => e.date === w.date && !e.extra);
-      return (
-        existing ?? {
-          id: uid(),
-          date: w.date,
-          dayName: w.dayName,
-          extra: false,
-          chores: [newChore()],
-        }
-      );
+    loadList("chores-log").then((stored) => {
+      const week = getWeekDates().map((w) => {
+        const existing = stored.find((e: any) => e.date === w.date && !e.extra);
+        return existing || { id: uid(), date: w.date, dayName: w.dayName, extra: false, chores: [newChore()] };
+      });
+      const extras = stored.filter((e: any) => e.extra);
+      setDays([...week, ...extras]);
+      setLoaded(true);
     });
-    setDays([...week, ...stored.filter((e) => e.extra)]);
-    setLoaded(true);
   }, []);
 
-  const updateDay = (dayId: string, patch: Partial<ChoreDay>) => {
+  const updateDayDate = (dayId: string, value: string) => {
     setDays((prev) => {
-      const next = prev.map((d) => (d.id === dayId ? { ...d, ...patch } : d));
-      return saveAndReturn("chores-log", next);
+      const next = prev.map((d) => (d.id === dayId ? { ...d, date: value } : d));
+      saveList("chores-log", next);
+      return next;
     });
   };
 
-  const updateChore = (dayId: string, choreId: string, patch: Partial<Chore>) => {
+  const updateChore = (dayId: string, choreId: string, patch: any) => {
     setDays((prev) => {
-      const next = prev.map((d) =>
-        d.id === dayId
-          ? {
-              ...d,
-              chores: d.chores.map((c) => (c.id === choreId ? { ...c, ...patch } : c)),
-            }
-          : d
-      );
-      return saveAndReturn("chores-log", next);
+      const next = prev.map((d) => (d.id === dayId ? { ...d, chores: d.chores.map((c: any) => (c.id === choreId ? { ...c, ...patch } : c)) } : d));
+      saveList("chores-log", next);
+      return next;
     });
   };
 
   const addChore = (dayId: string) => {
     setDays((prev) => {
-      const next = prev.map((d) =>
-        d.id === dayId ? { ...d, chores: [...d.chores, newChore()] } : d
-      );
-      return saveAndReturn("chores-log", next);
+      const next = prev.map((d) => (d.id === dayId ? { ...d, chores: [...d.chores, newChore()] } : d));
+      saveList("chores-log", next);
+      return next;
     });
   };
 
   const removeChore = (dayId: string, choreId: string) => {
     setDays((prev) => {
-      const next = prev.map((d) =>
-        d.id === dayId
-          ? { ...d, chores: d.chores.filter((c) => c.id !== choreId) }
-          : d
-      );
-      return saveAndReturn("chores-log", next);
+      const next = prev.map((d) => (d.id === dayId ? { ...d, chores: d.chores.filter((c: any) => c.id !== choreId) } : d));
+      saveList("chores-log", next);
+      return next;
     });
   };
 
   const addExtraDay = () => {
-    setDays((prev) =>
-      saveAndReturn("chores-log", [
-        ...prev,
-        {
-          id: uid(),
-          date: todayISO(),
-          dayName: "",
-          extra: true,
-          chores: [newChore()],
-        },
-      ])
-    );
+    setDays((prev) => {
+      const next = [...prev, { id: uid(), date: todayISO(), dayName: "", extra: true, chores: [newChore()] }];
+      saveList("chores-log", next);
+      return next;
+    });
   };
 
   const removeDay = (dayId: string) => {
-    setDays((prev) => saveAndReturn("chores-log", prev.filter((d) => d.id !== dayId)));
+    setDays((prev) => {
+      const next = prev.filter((d) => d.id !== dayId);
+      saveList("chores-log", next);
+      return next;
+    });
   };
 
   return (
-    <main className="mx-auto w-full max-w-md px-6 pb-10 pt-8">
+    <div className="w-full max-w-md mx-auto px-6 pt-8 pb-10">
       <TopBar title="งานบ้าน" accent={accent} onBack={onBack} />
-
       {loaded &&
         days.map((d) => {
-          const pending = d.chores.filter((c) => c.name.trim() && !c.done).length;
-
+          const pending = d.chores.filter((c: any) => c.name && !c.done).length;
           return (
-            <section
-              key={d.id}
-              className="mb-3 rounded-2xl p-4"
-              style={{ background: surface, border: `1px solid ${line}` }}
-            >
-              <div className="mb-3 flex items-center gap-2">
+            <div key={d.id} className="rounded-2xl p-4 mb-3" style={{ background: surface, border: `1px solid ${line}` }}>
+              <div className="flex items-center gap-2 mb-3">
                 {d.extra ? (
                   <input
                     type="date"
                     value={d.date}
-                    onChange={(e) => updateDay(d.id, { date: e.target.value })}
-                    className="bg-transparent text-sm font-semibold outline-none"
-                    style={{ color: ink }}
+                    onChange={(e) => updateDayDate(d.id, e.target.value)}
+                    style={{ background: "transparent", color: ink, border: "none", outline: "none", fontSize: "0.85rem", fontWeight: 600 }}
                   />
                 ) : (
                   <>
-                    <span className="text-sm font-semibold" style={{ color: ink }}>
-                      วัน{d.dayName}
-                    </span>
-                    <span className="text-xs" style={{ color: muted }}>
-                      {shortDate(d.date)}
-                    </span>
+                    <span className="font-semibold text-sm" style={{ color: ink }}>วัน{d.dayName}</span>
+                    <span className="text-xs" style={{ color: muted }}>{shortDate(d.date)}</span>
                   </>
                 )}
-
-                {pending > 0 && (
-                  <span className="ml-auto text-xs font-medium" style={{ color: accent }}>
-                    ค้าง {pending}
-                  </span>
-                )}
-
+                {pending > 0 && <span className="text-xs font-medium ml-auto" style={{ color: accent }}>ค้าง {pending}</span>}
                 {d.extra && (
-                  <button
-                    onClick={() => removeDay(d.id)}
-                    className="rounded p-1"
-                    style={{ color: muted }}
-                    aria-label="ลบวันนี้"
-                  >
+                  <button onClick={() => removeDay(d.id)} className="p-1" style={{ color: muted }} aria-label="ลบวันนี้">
                     <Trash2 size={14} />
                   </button>
                 )}
               </div>
-
-              {d.chores.map((c) => (
-                <div
-                  key={c.id}
-                  className="flex items-center gap-2.5 border-t py-2"
-                  style={{ borderColor: line }}
-                >
-                  <button
-                    onClick={() => updateChore(d.id, c.id, { done: !c.done })}
-                    style={{ color: c.done ? accent : muted }}
-                    className="shrink-0"
-                    aria-label="สลับสถานะงานบ้าน"
-                  >
+              {d.chores.map((c: any) => (
+                <div key={c.id} className="flex items-center gap-2.5 py-2" style={{ borderTop: `1px solid ${line}` }}>
+                  <button onClick={() => updateChore(d.id, c.id, { done: !c.done })} style={{ color: c.done ? accent : muted }} className="shrink-0" aria-label="สลับสถานะงานบ้าน">
                     {c.done ? <CheckCircle2 size={19} /> : <Circle size={19} />}
                   </button>
-
                   <input
                     type="text"
                     value={c.name}
                     onChange={(e) => updateChore(d.id, c.id, { name: e.target.value })}
                     placeholder="เช่น ล้างจาน, กวาดบ้าน, ซักผ้า"
-                    className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-                    style={{
-                      color: c.done ? muted : ink,
-                      textDecoration: c.done ? "line-through" : "none",
-                    }}
+                    style={{ flex: 1, minWidth: 0, background: "transparent", border: "none", outline: "none", color: c.done ? muted : ink, textDecoration: c.done ? "line-through" : "none", fontSize: "0.9rem" }}
                   />
-
-                  <button
-                    onClick={() => removeChore(d.id, c.id)}
-                    className="shrink-0 rounded p-1"
-                    style={{ color: muted }}
-                    aria-label="ลบงานนี้"
-                  >
+                  <button onClick={() => removeChore(d.id, c.id)} className="p-1 shrink-0" style={{ color: muted }} aria-label="ลบงานนี้">
                     <Trash2 size={13} />
                   </button>
                 </div>
               ))}
-
-              <button
-                onClick={() => addChore(d.id)}
-                className="mt-3 flex items-center gap-1.5 text-xs font-semibold"
-                style={{ color: accent }}
-              >
-                <Plus size={14} strokeWidth={2.5} />
-                เพิ่มงานบ้าน
+              <button onClick={() => addChore(d.id)} className="flex items-center gap-1.5 text-xs font-semibold mt-3" style={{ color: accent }}>
+                <Plus size={14} strokeWidth={2.5} /> เพิ่มงานบ้าน
               </button>
-            </section>
+            </div>
           );
         })}
-
-      <button
-        onClick={addExtraDay}
-        className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold"
-        style={{ border: `1px dashed ${line}`, color: muted }}
-      >
-        <Plus size={16} strokeWidth={2.5} />
-        เพิ่มวัน
+      <button onClick={addExtraDay} className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-semibold text-sm mt-1" style={{ border: `1px dashed ${line}`, color: muted }}>
+        <Plus size={16} strokeWidth={2.5} /> เพิ่มวัน
       </button>
-    </main>
+    </div>
   );
 }
 
-/* ---------------- Study ---------------- */
-
-type Task = { id: string; name: string; done: boolean };
-type Subject = { id: string; name: string; code: string; tasks: Task[] };
-
-function newTask(): Task {
+function newTask() {
   return { id: uid(), name: "", done: false };
 }
 
-function newSubject(): Subject {
+function newSubject() {
   return { id: uid(), name: "", code: "", tasks: [newTask()] };
 }
 
 function StudyScreen({ onBack }: { onBack: () => void }) {
   const accent = accents.study;
-  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [subjects, setSubjects] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    const stored = loadList<Subject>("study-log");
-    setSubjects(stored.length ? stored : [newSubject()]);
-    setLoaded(true);
+    loadList("study-log").then((stored) => {
+      setSubjects(stored.length ? stored : [newSubject()]);
+      setLoaded(true);
+    });
   }, []);
 
-  const updateSubject = (id: string, patch: Partial<Subject>) => {
+  const updateSubject = (id: string, patch: any) => {
     setSubjects((prev) => {
       const next = prev.map((s) => (s.id === id ? { ...s, ...patch } : s));
-      return saveAndReturn("study-log", next);
+      saveList("study-log", next);
+      return next;
     });
   };
 
   const addSubject = () => {
-    setSubjects((prev) => saveAndReturn("study-log", [...prev, newSubject()]));
+    setSubjects((prev) => {
+      const next = [...prev, newSubject()];
+      saveList("study-log", next);
+      return next;
+    });
   };
 
   const removeSubject = (id: string) => {
-    setSubjects((prev) => saveAndReturn("study-log", prev.filter((s) => s.id !== id)));
+    setSubjects((prev) => {
+      const next = prev.filter((s) => s.id !== id);
+      saveList("study-log", next);
+      return next;
+    });
   };
 
-  const updateTask = (subjectId: string, taskId: string, patch: Partial<Task>) => {
+  const updateTask = (subjectId: string, taskId: string, patch: any) => {
     setSubjects((prev) => {
-      const next = prev.map((s) =>
-        s.id === subjectId
-          ? {
-              ...s,
-              tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, ...patch } : t)),
-            }
-          : s
-      );
-      return saveAndReturn("study-log", next);
+      const next = prev.map((s) => (s.id === subjectId ? { ...s, tasks: s.tasks.map((t: any) => (t.id === taskId ? { ...t, ...patch } : t)) } : s));
+      saveList("study-log", next);
+      return next;
     });
   };
 
   const addTask = (subjectId: string) => {
     setSubjects((prev) => {
-      const next = prev.map((s) =>
-        s.id === subjectId ? { ...s, tasks: [...s.tasks, newTask()] } : s
-      );
-      return saveAndReturn("study-log", next);
+      const next = prev.map((s) => (s.id === subjectId ? { ...s, tasks: [...s.tasks, newTask()] } : s));
+      saveList("study-log", next);
+      return next;
     });
   };
 
   const removeTask = (subjectId: string, taskId: string) => {
     setSubjects((prev) => {
-      const next = prev.map((s) =>
-        s.id === subjectId
-          ? { ...s, tasks: s.tasks.filter((t) => t.id !== taskId) }
-          : s
-      );
-      return saveAndReturn("study-log", next);
+      const next = prev.map((s) => (s.id === subjectId ? { ...s, tasks: s.tasks.filter((t: any) => t.id !== taskId) } : s));
+      saveList("study-log", next);
+      return next;
     });
   };
 
   return (
-    <main className="mx-auto w-full max-w-md px-6 pb-10 pt-8">
+    <div className="w-full max-w-md mx-auto px-6 pt-8 pb-10">
       <TopBar title="จดการเรียน" accent={accent} onBack={onBack} />
-
       {loaded &&
         subjects.map((s) => {
-          const pending = s.tasks.filter((t) => t.name.trim() && !t.done).length;
-
+          const pending = s.tasks.filter((t: any) => t.name && !t.done).length;
           return (
-            <section
-              key={s.id}
-              className="mb-3 rounded-2xl p-4"
-              style={{ background: surface, border: `1px solid ${line}` }}
-            >
-              <div className="mb-1 flex items-start gap-2">
-                <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-4">
+            <div key={s.id} className="rounded-2xl p-4 mb-3" style={{ background: surface, border: `1px solid ${line}` }}>
+              <div className="flex items-start gap-2 mb-1">
+                <div className="flex-1 grid grid-cols-2 gap-x-4">
                   <Field label="ชื่อวิชา">
-                    <Underline
-                      accent={accent}
-                      type="text"
-                      value={s.name}
-                      onChange={(e) => updateSubject(s.id, { name: e.target.value })}
-                      placeholder="คณิตศาสตร์"
-                    />
+                    <Underline accent={accent} type="text" value={s.name} onChange={(e: any) => updateSubject(s.id, { name: e.target.value })} placeholder="แคลคูลัส" />
                   </Field>
                   <Field label="รหัสวิชา">
-                    <Underline
-                      accent={accent}
-                      type="text"
-                      value={s.code}
-                      onChange={(e) => updateSubject(s.id, { code: e.target.value })}
-                      placeholder="MA101"
-                    />
+                    <Underline accent={accent} type="text" value={s.code} onChange={(e: any) => updateSubject(s.id, { code: e.target.value })} placeholder="MA101" />
                   </Field>
                 </div>
-
-                <button
-                  onClick={() => removeSubject(s.id)}
-                  className="mt-5 rounded p-1"
-                  style={{ color: muted }}
-                  aria-label="ลบวิชานี้"
-                >
+                <button onClick={() => removeSubject(s.id)} className="p-1 mt-5" style={{ color: muted }} aria-label="ลบวิชานี้">
                   <Trash2 size={15} />
                 </button>
               </div>
-
-              {pending > 0 && (
-                <p className="mb-1 text-xs" style={{ color: accent }}>
-                  ค้างอยู่ {pending} งาน
-                </p>
-              )}
-
-              {s.tasks.map((t) => (
-                <div
-                  key={t.id}
-                  className="flex items-center gap-2.5 border-t py-2"
-                  style={{ borderColor: line }}
-                >
-                  <button
-                    onClick={() => updateTask(s.id, t.id, { done: !t.done })}
-                    style={{ color: t.done ? accent : muted }}
-                    className="shrink-0"
-                    aria-label="สลับสถานะงาน"
-                  >
+              {pending > 0 && <p className="text-xs mb-1" style={{ color: accent }}>ขาดอยู่ {pending} งาน</p>}
+              {s.tasks.map((t: any) => (
+                <div key={t.id} className="flex items-center gap-2.5 py-2" style={{ borderTop: `1px solid ${line}` }}>
+                  <button onClick={() => updateTask(s.id, t.id, { done: !t.done })} style={{ color: t.done ? accent : muted }} className="shrink-0" aria-label="สลับสถานะงาน">
                     {t.done ? <CheckCircle2 size={19} /> : <Circle size={19} />}
                   </button>
-
                   <input
                     type="text"
                     value={t.name}
                     onChange={(e) => updateTask(s.id, t.id, { name: e.target.value })}
                     placeholder="ชื่องาน"
-                    className="min-w-0 flex-1 bg-transparent text-sm outline-none"
-                    style={{
-                      color: t.done ? muted : ink,
-                      textDecoration: t.done ? "line-through" : "none",
-                    }}
+                    style={{ flex: 1, minWidth: 0, background: "transparent", border: "none", outline: "none", color: t.done ? muted : ink, textDecoration: t.done ? "line-through" : "none", fontSize: "0.9rem" }}
                   />
-
-                  <button
-                    onClick={() => removeTask(s.id, t.id)}
-                    className="shrink-0 rounded p-1"
-                    style={{ color: muted }}
-                    aria-label="ลบงานนี้"
-                  >
+                  <button onClick={() => removeTask(s.id, t.id)} className="p-1 shrink-0" style={{ color: muted }} aria-label="ลบงานนี้">
                     <Trash2 size={13} />
                   </button>
                 </div>
               ))}
-
-              <button
-                onClick={() => addTask(s.id)}
-                className="mt-3 flex items-center gap-1.5 text-xs font-semibold"
-                style={{ color: accent }}
-              >
-                <Plus size={14} strokeWidth={2.5} />
-                เพิ่มงาน
+              <button onClick={() => addTask(s.id)} className="flex items-center gap-1.5 text-xs font-semibold mt-3" style={{ color: accent }}>
+                <Plus size={14} strokeWidth={2.5} /> เพิ่มงาน
               </button>
-            </section>
+            </div>
           );
         })}
-
-      <button
-        onClick={addSubject}
-        className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold"
-        style={{ border: `1px dashed ${line}`, color: muted }}
-      >
-        <Plus size={16} strokeWidth={2.5} />
-        เพิ่มวิชา
+      <button onClick={addSubject} className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-semibold text-sm mt-1" style={{ border: `1px dashed ${line}`, color: muted }}>
+        <Plus size={16} strokeWidth={2.5} /> เพิ่มวิชา
       </button>
-    </main>
+    </div>
   );
 }
 
-/* ---------------- Finance ---------------- */
-
-type MoneyEntry = {
-  id: string;
-  date: string;
-  kind: "income" | "expense";
-  amount: number;
-  category: string;
-  note: string;
-};
-
-type Favorite = {
-  id: string;
-  name: string;
-  amount: string;
-  kind: "income" | "expense";
-  category: string;
-};
-
 function MoneyScreen({ onBack }: { onBack: () => void }) {
   const accent = accents.money;
-  const [entries, setEntries] = useState<MoneyEntry[]>([]);
-  const [favorites, setFavorites] = useState<Favorite[]>([]);
+  const [entries, setEntries] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [date, setDate] = useState(todayISO());
-  const [kind, setKind] = useState<"income" | "expense">("income");
+  const [kind, setKind] = useState("income");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [note, setNote] = useState("");
+  const [favorites, setFavorites] = useState<any[]>([]);
   const [editingFavs, setEditingFavs] = useState(false);
 
   useEffect(() => {
-    setEntries(loadList<MoneyEntry>("finance-log"));
-    setFavorites(loadList<Favorite>("finance-favorites"));
-    setLoaded(true);
+    loadList("finance-log").then((l) => {
+      setEntries(l);
+      setLoaded(true);
+    });
+    loadList("finance-favorites").then(setFavorites);
   }, []);
 
-  const totalIncome = useMemo(
-    () => entries.filter((e) => e.kind === "income").reduce((sum, e) => sum + e.amount, 0),
-    [entries]
-  );
-  const totalExpense = useMemo(
-    () => entries.filter((e) => e.kind === "expense").reduce((sum, e) => sum + e.amount, 0),
-    [entries]
-  );
-  const balance = totalIncome - totalExpense;
-
-  const fmt = (n: number) =>
-    n.toLocaleString("th-TH", { maximumFractionDigits: 2 });
-
   const add = () => {
-    const numeric = Number(amount);
-    if (!Number.isFinite(numeric) || numeric <= 0) return;
-
-    const next: MoneyEntry[] = [
-      {
-        id: uid(),
-        date,
-        kind,
-        amount: numeric,
-        category: category.trim(),
-        note: note.trim(),
-      },
-      ...entries,
-    ];
-
+    const amt = Number(amount);
+    if (!amt) return;
+    const next = [{ id: uid(), date, kind, amount: amt, category, note }, ...entries];
     setEntries(next);
     saveList("finance-log", next);
     setAmount("");
@@ -1244,106 +742,74 @@ function MoneyScreen({ onBack }: { onBack: () => void }) {
     saveList("finance-log", next);
   };
 
-  const quickAdd = (fav: Favorite) => {
-    const numeric = Number(fav.amount);
-    if (!Number.isFinite(numeric) || numeric <= 0) return;
-
-    const next: MoneyEntry[] = [
-      {
-        id: uid(),
-        date: todayISO(),
-        kind: fav.kind,
-        amount: numeric,
-        category: fav.category,
-        note: fav.name,
-      },
-      ...entries,
-    ];
-
+  const quickAdd = (fav: any) => {
+    const amt = Number(fav.amount);
+    if (!amt) return;
+    const next = [{ id: uid(), date: todayISO(), kind: fav.kind, amount: amt, category: fav.category, note: fav.name }, ...entries];
     setEntries(next);
     saveList("finance-log", next);
   };
 
-  const updateFav = (id: string, patch: Partial<Favorite>) => {
+  const updateFav = (id: string, patch: any) => {
     setFavorites((prev) => {
       const next = prev.map((f) => (f.id === id ? { ...f, ...patch } : f));
-      return saveAndReturn("finance-favorites", next);
+      saveList("finance-favorites", next);
+      return next;
     });
   };
 
   const addFav = () => {
-    setFavorites((prev) =>
-      saveAndReturn("finance-favorites", [
-        ...prev,
-        { id: uid(), name: "", amount: "", kind: "expense", category: "" },
-      ])
-    );
+    setFavorites((prev) => {
+      const next = [...prev, { id: uid(), name: "", amount: "", kind: "expense", category: "" }];
+      saveList("finance-favorites", next);
+      return next;
+    });
   };
 
   const removeFav = (id: string) => {
-    setFavorites((prev) =>
-      saveAndReturn("finance-favorites", prev.filter((f) => f.id !== id))
-    );
+    setFavorites((prev) => {
+      const next = prev.filter((f) => f.id !== id);
+      saveList("finance-favorites", next);
+      return next;
+    });
   };
 
-  return (
-    <main className="mx-auto w-full max-w-md px-6 pb-10 pt-8">
-      <TopBar title="รายรับ-รายจ่าย" accent={accent} onBack={onBack} />
+  const totalIncome = entries.filter((e) => e.kind === "income").reduce((s, e) => s + e.amount, 0);
+  const totalExpense = entries.filter((e) => e.kind === "expense").reduce((s, e) => s + e.amount, 0);
+  const balance = totalIncome - totalExpense;
+  const fmt = (n: number) => n.toLocaleString("th-TH", { maximumFractionDigits: 2 });
 
+  return (
+    <div className="w-full max-w-md mx-auto px-6 pt-8 pb-10">
+      <TopBar title="รายรับ-รายจ่าย" accent={accent} onBack={onBack} />
       <div className="mb-7">
-        <p className="mb-1 text-xs" style={{ color: muted }}>
-          ยอดคงเหลือ
-        </p>
-        <p
-          className="text-4xl font-black tracking-tight"
-          style={{ color: balance >= 0 ? ink : "#D9695F" }}
-        >
+        <p className="text-xs mb-1" style={{ color: muted }}>ยอดคงเหลือ</p>
+        <p className="text-4xl font-black tracking-tight" style={{ color: balance >= 0 ? ink : "#D9695F" }}>
           ฿{fmt(balance)}
         </p>
-        <div className="mt-2 flex gap-5 text-xs">
+        <div className="flex gap-5 mt-2 text-xs">
           <span style={{ color: accents.workout }}>รับ ฿{fmt(totalIncome)}</span>
           <span style={{ color: "#D9695F" }}>จ่าย ฿{fmt(totalExpense)}</span>
         </div>
       </div>
 
       <div className="mb-7">
-        <div className="mb-3 flex items-center justify-between">
-          <p className="text-xs" style={{ color: muted }}>
-            รายการโปรด
-          </p>
-          <button
-            onClick={() => setEditingFavs((v) => !v)}
-            className="text-xs font-semibold"
-            style={{ color: accent }}
-          >
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs" style={{ color: muted }}>รายการโปรด</p>
+          <button onClick={() => setEditingFavs((v) => !v)} className="text-xs font-semibold" style={{ color: accent }}>
             {editingFavs ? "เสร็จ" : "แก้ไข"}
           </button>
         </div>
-
         {!editingFavs &&
           (favorites.length === 0 ? (
-            <p className="text-xs" style={{ color: muted }}>
-              ยังไม่มีรายการโปรด กด “แก้ไข” เพื่อเพิ่มรายการที่ใช้บ่อย
-            </p>
+            <p className="text-xs" style={{ color: muted }}>ยังไม่มีรายการโปรด กด "แก้ไข" เพื่อเพิ่มของที่ซื้อราคาเดิมทุกวัน</p>
           ) : (
             <div className="flex flex-wrap gap-2">
               {favorites.map((f) => (
-                <button
-                  key={f.id}
-                  onClick={() => quickAdd(f)}
-                  className="rounded-xl px-3.5 py-2.5 text-left"
-                  style={{ background: surface, border: `1px solid ${line}` }}
-                >
-                  <div className="text-xs font-medium" style={{ color: ink }}>
-                    {f.name || "ไม่มีชื่อ"}
-                  </div>
-                  <div
-                    className="text-xs"
-                    style={{
-                      color: f.kind === "income" ? accents.workout : "#D9695F",
-                    }}
-                  >
-                    {f.kind === "income" ? "+" : "-"}฿{fmt(Number(f.amount) || 0)}
+                <button key={f.id} onClick={() => quickAdd(f)} className="px-3.5 py-2.5 rounded-xl text-left" style={{ background: surface, border: `1px solid ${line}` }}>
+                  <div className="text-xs font-medium" style={{ color: ink }}>{f.name || "ไม่มีชื่อ"}</div>
+                  <div className="text-xs" style={{ color: f.kind === "income" ? accents.workout : "#D9695F" }}>
+                    {f.kind === "income" ? "+" : "-"}{fmt(Number(f.amount) || 0)}
                   </div>
                 </button>
               ))}
@@ -1353,321 +819,183 @@ function MoneyScreen({ onBack }: { onBack: () => void }) {
         {editingFavs && (
           <div className="flex flex-col gap-3">
             {favorites.map((f) => (
-              <div
-                key={f.id}
-                className="rounded-xl p-3"
-                style={{ background: surface, border: `1px solid ${line}` }}
-              >
-                <div className="mb-3 flex gap-2">
-                  {[
-                    { key: "income" as const, label: "รายรับ" },
-                    { key: "expense" as const, label: "รายจ่าย" },
-                  ].map((option) => (
+              <div key={f.id} className="rounded-xl p-3" style={{ background: surface, border: `1px solid ${line}` }}>
+                <div className="flex gap-2 mb-3">
+                  {[{ key: "income", label: "รายรับ" }, { key: "expense", label: "รายจ่าย" }].map((k) => (
                     <button
-                      key={option.key}
-                      onClick={() => updateFav(f.id, { kind: option.key })}
-                      className="flex-1 rounded-lg py-1.5 text-xs font-semibold"
+                      key={k.key}
+                      onClick={() => updateFav(f.id, { kind: k.key })}
+                      className="flex-1 py-1.5 rounded-lg text-xs font-semibold"
                       style={{
-                        background: f.kind === option.key ? accent : "transparent",
-                        color: f.kind === option.key ? bg : muted,
-                        border: `1px solid ${
-                          f.kind === option.key ? accent : line
-                        }`,
+                        background: f.kind === k.key ? accent : "transparent",
+                        color: f.kind === k.key ? "#12141C" : muted,
+                        border: `1px solid ${f.kind === k.key ? accent : line}`,
                       }}
                     >
-                      {option.label}
+                      {k.label}
                     </button>
                   ))}
-                  <button
-                    onClick={() => removeFav(f.id)}
-                    className="rounded p-1.5"
-                    style={{ color: muted }}
-                    aria-label="ลบรายการโปรด"
-                  >
+                  <button onClick={() => removeFav(f.id)} className="p-1.5" style={{ color: muted }} aria-label="ลบรายการโปรดนี้">
                     <Trash2 size={14} />
                   </button>
                 </div>
-
                 <div className="grid grid-cols-2 gap-x-4">
                   <Field label="ชื่อ">
-                    <Underline
-                      accent={accent}
-                      type="text"
-                      value={f.name}
-                      onChange={(e) => updateFav(f.id, { name: e.target.value })}
-                      placeholder="กาแฟ"
-                    />
+                    <Underline accent={accent} type="text" value={f.name} onChange={(e: any) => updateFav(f.id, { name: e.target.value })} placeholder="กาแฟ" />
                   </Field>
                   <Field label="จำนวนเงิน (บาท)">
-                    <Underline
-                      accent={accent}
-                      type="number"
-                      min="0"
-                      value={f.amount}
-                      onChange={(e) => updateFav(f.id, { amount: e.target.value })}
-                      placeholder="35"
-                    />
+                    <Underline accent={accent} type="number" min="0" value={f.amount} onChange={(e: any) => updateFav(f.id, { amount: e.target.value })} placeholder="35" />
                   </Field>
                 </div>
-
                 <Field label="หมวดหมู่ (ไม่บังคับ)">
-                  <Underline
-                    accent={accent}
-                    type="text"
-                    value={f.category}
-                    onChange={(e) => updateFav(f.id, { category: e.target.value })}
-                    placeholder="อาหาร"
-                  />
+                  <Underline accent={accent} type="text" value={f.category} onChange={(e: any) => updateFav(f.id, { category: e.target.value })} placeholder="อาหาร" />
                 </Field>
               </div>
             ))}
-
-            <button
-              onClick={addFav}
-              className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold"
-              style={{ border: `1px dashed ${line}`, color: muted }}
-            >
-              <Plus size={14} strokeWidth={2.5} />
-              เพิ่มรายการโปรด
+            <button onClick={addFav} className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 font-semibold text-xs" style={{ border: `1px dashed ${line}`, color: muted }}>
+              <Plus size={14} strokeWidth={2.5} /> เพิ่มรายการโปรด
             </button>
           </div>
         )}
       </div>
 
-      <div
-        className="mb-8 rounded-2xl p-4"
-        style={{ background: surface, border: `1px solid ${line}` }}
-      >
-        <div className="mb-4 flex gap-2">
-          {[
-            { key: "income" as const, label: "รายรับ" },
-            { key: "expense" as const, label: "รายจ่าย" },
-          ].map((option) => (
+      <div className="rounded-2xl p-4 mb-8" style={{ background: surface, border: `1px solid ${line}` }}>
+        <div className="flex gap-2 mb-4">
+          {[{ key: "income", label: "รายรับ" }, { key: "expense", label: "รายจ่าย" }].map((k) => (
             <button
-              key={option.key}
-              onClick={() => setKind(option.key)}
-              className="flex-1 rounded-lg py-2 text-sm font-semibold"
+              key={k.key}
+              onClick={() => setKind(k.key)}
+              className="flex-1 py-2 rounded-lg text-sm font-semibold"
               style={{
-                background: kind === option.key ? accent : "transparent",
-                color: kind === option.key ? bg : muted,
-                border: `1px solid ${kind === option.key ? accent : line}`,
+                background: kind === k.key ? accent : "transparent",
+                color: kind === k.key ? "#12141C" : muted,
+                border: `1px solid ${kind === k.key ? accent : line}`,
               }}
             >
-              {option.label}
+              {k.label}
             </button>
           ))}
         </div>
-
         <div className="grid grid-cols-2 gap-x-4">
           <Field label="จำนวนเงิน (บาท)">
-            <Underline
-              accent={accent}
-              type="number"
-              min="0"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="150"
-            />
+            <Underline accent={accent} type="number" min="0" value={amount} onChange={(e: any) => setAmount(e.target.value)} placeholder="150" />
           </Field>
           <Field label="วันที่">
-            <Underline
-              accent={accent}
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-            />
+            <Underline accent={accent} type="date" value={date} onChange={(e: any) => setDate(e.target.value)} />
           </Field>
         </div>
-
         <Field label="หมวดหมู่">
-          <Underline
-            accent={accent}
-            type="text"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            placeholder="อาหาร, ค่าเดินทาง ฯลฯ"
-          />
+          <Underline accent={accent} type="text" value={category} onChange={(e: any) => setCategory(e.target.value)} placeholder="อาหาร, ค่าเดินทาง ฯลฯ" />
         </Field>
-
         <Field label="โน้ต (ไม่บังคับ)">
-          <Underline
-            accent={accent}
-            type="text"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="รายละเอียดเพิ่มเติม"
-          />
+          <Underline accent={accent} type="text" value={note} onChange={(e: any) => setNote(e.target.value)} />
         </Field>
-
-        <AddButton accent={accent} onClick={add} disabled={!Number(amount)}>
+        <AddButton accent={accent} onClick={add}>
           บันทึกรายการ
         </AddButton>
       </div>
 
-      {loaded && entries.length === 0 && (
-        <Empty text="ยังไม่มีรายการ เริ่มบันทึกรายการแรกกันเลย" />
-      )}
-
+      {loaded && entries.length === 0 && <Empty text="ยังไม่มีรายการ เริ่มบันทึกรายการแรกกันเลย" />}
       {entries.map((e) => (
         <EntryRow key={e.id} onDelete={() => remove(e.id)}>
-          <div className="mb-0.5 flex items-baseline gap-2">
-            <span
-              className="text-sm font-semibold"
-              style={{ color: e.kind === "income" ? accents.workout : "#D9695F" }}
-            >
+          <div className="flex items-baseline gap-2 mb-0.5">
+            <span className="font-semibold text-sm" style={{ color: e.kind === "income" ? accents.workout : "#D9695F" }}>
               {e.kind === "income" ? "+" : "-"}฿{fmt(e.amount)}
             </span>
-            {e.category && (
-              <span className="text-xs" style={{ color: muted }}>
-                {e.category}
-              </span>
-            )}
-            <span className="ml-auto mr-2 text-xs" style={{ color: muted }}>
-              {thaiDate(e.date)}
-            </span>
+            {e.category && <span className="text-xs" style={{ color: muted }}>{e.category}</span>}
+            <span className="text-xs ml-auto mr-2" style={{ color: muted }}>{thaiDate(e.date)}</span>
           </div>
-          {e.note && (
-            <div className="text-xs" style={{ color: muted }}>
-              {e.note}
-            </div>
-          )}
+          {e.note && <div className="text-xs" style={{ color: muted }}>{e.note}</div>}
         </EntryRow>
       ))}
-    </main>
+    </div>
   );
 }
 
-/* ---------------- Weekly summary ---------------- */
-
 function StatsScreen({ onBack }: { onBack: () => void }) {
   const accent = accents.stats;
-  const [hoopsDays, setHoopsDays] = useState<HoopDay[]>([]);
-  const [workoutDays, setWorkoutDays] = useState<WorkoutDay[]>([]);
-  const [choreDays, setChoreDays] = useState<ChoreDay[]>([]);
+  const [hoopsDays, setHoopsDays] = useState<any[]>([]);
+  const [workoutDays, setWorkoutDays] = useState<any[]>([]);
+  const [choreDays, setChoreDays] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    setHoopsDays(loadList<HoopDay>("hoops-log").filter((d) => !d.extra));
-    setWorkoutDays(loadList<WorkoutDay>("workout-log").filter((d) => !d.extra));
-    setChoreDays(loadList<ChoreDay>("chores-log").filter((d) => !d.extra));
-    setLoaded(true);
+    Promise.all([loadList("hoops-log"), loadList("workout-log"), loadList("chores-log")]).then(([h, w, c]) => {
+      setHoopsDays(h.filter((d: any) => !d.extra));
+      setWorkoutDays(w.filter((d: any) => !d.extra));
+      setChoreDays(c.filter((d: any) => !d.extra));
+      setLoaded(true);
+    });
   }, []);
 
   const week = getWeekDates();
+  const byDate = (list: any[], date: string) => list.find((d) => d.date === date);
 
   return (
-    <main className="mx-auto w-full max-w-md px-6 pb-10 pt-8">
+    <div className="w-full max-w-md mx-auto px-6 pt-8 pb-10">
       <TopBar title="สรุปสัปดาห์" accent={accent} onBack={onBack} />
-
       {loaded &&
         week.map((w) => {
-          const hoop = hoopsDays.find((d) => d.date === w.date);
-          const workout = workoutDays.find((d) => d.date === w.date);
-          const chore = choreDays.find((d) => d.date === w.date);
+          const hoop = byDate(hoopsDays, w.date);
+          const workout = byDate(workoutDays, w.date);
+          const chore = byDate(choreDays, w.date);
 
-          const hoopActive =
-            !!hoop &&
-            (Number(hoop.made) > 0 ||
-              Number(hoop.attempts) > 0 ||
-              !!hoop.note.trim());
+          const hoopActive = hoop && (Number(hoop.made) > 0 || Number(hoop.attempts) > 0 || hoop.note);
+          const moves = workout ? workout.moves.filter((m: any) => m.move) : [];
+          const choresAll = chore ? chore.chores.filter((c: any) => c.name) : [];
+          const choresDone = choresAll.filter((c: any) => c.done);
 
-          const moves = workout?.moves.filter((m) => m.move.trim()) ?? [];
-          const choresAll = chore?.chores.filter((c) => c.name.trim()) ?? [];
-          const choresDone = choresAll.filter((c) => c.done);
           const hasAnything = hoopActive || moves.length > 0 || choresAll.length > 0;
 
           return (
-            <section
-              key={w.date}
-              className="mb-3 rounded-2xl p-4"
-              style={{ background: surface, border: `1px solid ${line}` }}
-            >
-              <div className="mb-3 flex items-baseline gap-2">
-                <span className="text-sm font-semibold" style={{ color: ink }}>
-                  วัน{w.dayName}
-                </span>
-                <span className="text-xs" style={{ color: muted }}>
-                  {shortDate(w.date)}
-                </span>
+            <div key={w.date} className="rounded-2xl p-4 mb-3" style={{ background: surface, border: `1px solid ${line}` }}>
+              <div className="flex items-baseline gap-2 mb-3">
+                <span className="font-semibold text-sm" style={{ color: ink }}>วัน{w.dayName}</span>
+                <span className="text-xs" style={{ color: muted }}>{shortDate(w.date)}</span>
               </div>
-
               {!hasAnything ? (
-                <p className="text-xs" style={{ color: muted }}>
-                  ยังไม่มีบันทึกวันนี้
-                </p>
+                <p className="text-xs" style={{ color: muted }}>ยังไม่มีบันทึกวันนี้</p>
               ) : (
                 <div className="flex flex-col gap-2.5">
                   {hoopActive && (
                     <div className="flex gap-2 text-xs">
-                      <Activity
-                        size={14}
-                        color={accents.hoops}
-                        className="mt-0.5 shrink-0"
-                      />
+                      <Activity size={14} color={accents.hoops} className="shrink-0 mt-0.5" />
                       <span style={{ color: muted }}>
-                        ซ้อมบาส
-                        {Number(hoop?.attempts) > 0
-                          ? ` — ${hoop?.made || 0}/${hoop?.attempts} เข้า`
-                          : ""}
-                        {hoop?.note ? ` · ${hoop.note}` : ""}
+                        ซ้อมบาส {Number(hoop.attempts) > 0 ? `ยิงเข้า ${hoop.made || 0}/${hoop.attempts}` : ""} {hoop.note ? `- ${hoop.note}` : ""}
                       </span>
                     </div>
                   )}
-
                   {moves.length > 0 && (
                     <div className="flex gap-2 text-xs">
-                      <Dumbbell
-                        size={14}
-                        color={accents.workout}
-                        className="mt-0.5 shrink-0"
-                      />
+                      <Dumbbell size={14} color={accents.workout} className="shrink-0 mt-0.5" />
                       <span style={{ color: muted }}>
-                        ออกกำลังกาย —{" "}
-                        {moves
-                          .map((m) =>
-                            m.move +
-                            (m.sets && m.reps ? ` (${m.sets}x${m.reps})` : "")
-                          )
-                          .join(", ")}
+                        ออกกำลังกาย - {moves.map((m: any) => m.move + (m.sets && m.reps ? ` (${m.sets}x${m.reps})` : "")).join(", ")}
                       </span>
                     </div>
                   )}
-
                   {choresAll.length > 0 && (
                     <div className="flex gap-2 text-xs">
-                      <HomeIcon
-                        size={14}
-                        color={accents.chores}
-                        className="mt-0.5 shrink-0"
-                      />
+                      <HomeIcon size={14} color={accents.chores} className="shrink-0 mt-0.5" />
                       <span style={{ color: muted }}>
-                        งานบ้าน — เสร็จ {choresDone.length}/{choresAll.length}
+                        งานบ้าน - เสร็จ {choresDone.length}/{choresAll.length}
                       </span>
                     </div>
                   )}
                 </div>
               )}
-            </section>
+            </div>
           );
         })}
-    </main>
+    </div>
   );
 }
 
-/* ---------------- App ---------------- */
-
+// Main App Export
 export default function App() {
-  const [view, setView] = useState<View>("home");
+  const [view, setView] = useState("home");
 
   return (
-    <div
-      className="min-h-screen font-sans"
-      style={{
-        background: bg,
-        color: ink,
-        minHeight: "100vh",
-      }}
-    >
+    <div style={{ background: bg, minHeight: "100vh" }} className="font-sans text-white">
       {view === "home" && <Home onSelect={setView} />}
       {view === "hoops" && <HoopsScreen onBack={() => setView("home")} />}
       {view === "workout" && <WorkoutScreen onBack={() => setView("home")} />}
