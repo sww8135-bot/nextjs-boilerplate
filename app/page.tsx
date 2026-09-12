@@ -1,13 +1,36 @@
-'use client';
-import { useState, useEffect } from "react";
-import { ArrowLeft, Activity, Dumbbell, BookOpen, Wallet, Plus, Trash2, CheckCircle2, Circle, Home as HomeIcon, BarChart3 } from "lucide-react";
+/* app/page.tsx */
+"use client";
 
-// ---- palette (hardwood court + notebook ink) ----
+import { useEffect, useMemo, useState } from "react";
+import type {
+  ButtonHTMLAttributes,
+  ComponentType,
+  InputHTMLAttributes,
+  ReactNode,
+  TextareaHTMLAttributes,
+} from "react";
+import {
+  Activity,
+  BarChart3,
+  BookOpen,
+  CheckCircle2,
+  Circle,
+  Dumbbell,
+  Home as HomeIcon,
+  Plus,
+  Trash2,
+  Wallet,
+  ArrowLeft,
+} from "lucide-react";
+
+type View = "home" | "hoops" | "workout" | "study" | "money" | "chores" | "stats";
+
 const bg = "#12141C";
 const surface = "#1A1D27";
-const line = "rgba(236,237,242,0.08)";
+const line = "rgba(236,237,242,0.10)";
 const ink = "#ECEDF2";
 const muted = "#868C9C";
+
 const accents = {
   hoops: "#E07B39",
   workout: "#5FA97A",
@@ -17,42 +40,109 @@ const accents = {
   stats: "#B08FD8",
 };
 
-async function loadList(key) {
-  try {
-    const res = await window.storage.get(key, false);
-    return res ? JSON.parse(res.value) : [];
-  } catch {
-    return [];
-  }
-}
-async function saveList(key, list) {
-  try {
-    await window.storage.set(key, JSON.stringify(list), false);
-  } catch (e) {
-    console.error("save failed", e);
-  }
-}
+const STORAGE_PREFIX = "note-it-v2:";
+
 function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
-function thaiDate(iso) {
-  if (!iso) return "";
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "2-digit" });
-}
-function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
-function TopBar({ title, accent, onBack }) {
+function todayISO() {
+  const d = new Date();
+  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+function shortDate(iso: string) {
+  if (!iso) return "";
+  const d = new Date(`${iso}T00:00:00`);
+  return d.toLocaleDateString("th-TH", { day: "numeric", month: "short" });
+}
+
+function thaiDate(iso: string) {
+  if (!iso) return "";
+  const d = new Date(`${iso}T00:00:00`);
+  return d.toLocaleDateString("th-TH", {
+    day: "numeric",
+    month: "short",
+    year: "2-digit",
+  });
+}
+
+function loadList<T>(key: string, fallback: T[] = []): T[] {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const raw = window.localStorage.getItem(STORAGE_PREFIX + key);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function saveList<T>(key: string, list: T[]) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(list));
+  } catch (error) {
+    console.error("บันทึกข้อมูลไม่สำเร็จ", error);
+  }
+}
+
+const WEEKDAY_NAMES = [
+  "จันทร์",
+  "อังคาร",
+  "พุธ",
+  "พฤหัสบดี",
+  "ศุกร์",
+  "เสาร์",
+  "อาทิตย์",
+];
+
+type WeekDay = {
+  date: string;
+  dayName: string;
+};
+
+function getWeekDates(): WeekDay[] {
+  const now = new Date();
+  const day = now.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const monday = new Date(now);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(now.getDate() + diffToMonday);
+
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+    return {
+      date: local.toISOString().slice(0, 10),
+      dayName: WEEKDAY_NAMES[i],
+    };
+  });
+}
+
+function saveAndReturn<T>(key: string, next: T[]): T[] {
+  saveList(key, next);
+  return next;
+}
+
+function TopBar({
+  title,
+  accent,
+  onBack,
+}: {
+  title: string;
+  accent: string;
+  onBack: () => void;
+}) {
   return (
-    <div className="flex items-center gap-3 mb-6">
+    <div className="mb-6 flex items-center gap-3">
       <button
         onClick={onBack}
-        className="p-2 rounded-full transition-colors"
+        className="rounded-full p-2 transition-opacity hover:opacity-70"
         style={{ color: muted }}
-        onMouseEnter={(e) => (e.currentTarget.style.color = ink)}
-        onMouseLeave={(e) => (e.currentTarget.style.color = muted)}
         aria-label="กลับ"
       >
         <ArrowLeft size={20} />
@@ -60,15 +150,24 @@ function TopBar({ title, accent, onBack }) {
       <h1 className="text-xl font-bold tracking-tight" style={{ color: ink }}>
         {title}
       </h1>
-      <div className="ml-auto w-2 h-2 rounded-full" style={{ background: accent }} />
+      <div
+        className="ml-auto h-2 w-2 rounded-full"
+        style={{ background: accent }}
+      />
     </div>
   );
 }
 
-function Field({ label, children }) {
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
   return (
-    <label className="block mb-4">
-      <span className="block text-xs mb-1.5" style={{ color: muted }}>
+    <label className="mb-4 block">
+      <span className="mb-1.5 block text-xs" style={{ color: muted }}>
         {label}
       </span>
       {children}
@@ -76,55 +175,80 @@ function Field({ label, children }) {
   );
 }
 
-const inputBase = {
-  width: "100%",
-  background: "transparent",
-  borderBottom: `1px solid ${line}`,
-  color: ink,
-  padding: "6px 2px",
-  outline: "none",
-  fontSize: "0.95rem",
-};
-
-function Underline(props) {
+function Underline({
+  accent,
+  ...props
+}: InputHTMLAttributes<HTMLInputElement> & { accent: string }) {
   const [focused, setFocused] = useState(false);
+
   return (
     <input
       {...props}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      onFocus={(e) => {
+        setFocused(true);
+        props.onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        setFocused(false);
+        props.onBlur?.(e);
+      }}
+      className={`w-full border-0 border-b bg-transparent px-0.5 py-1.5 outline-none ${
+        props.className ?? ""
+      }`}
       style={{
-        ...inputBase,
-        borderBottom: `1.5px solid ${focused ? props.accent : line}`,
+        color: ink,
+        borderBottom: `1.5px solid ${focused ? accent : line}`,
         transition: "border-color 120ms",
+        ...props.style,
       }}
     />
   );
 }
 
-function TextareaUnderline(props) {
+function TextareaUnderline({
+  accent,
+  ...props
+}: TextareaHTMLAttributes<HTMLTextAreaElement> & { accent: string }) {
   const [focused, setFocused] = useState(false);
+
   return (
     <textarea
       {...props}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      onFocus={(e) => {
+        setFocused(true);
+        props.onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        setFocused(false);
+        props.onBlur?.(e);
+      }}
+      className={`w-full resize-none border-0 border-b bg-transparent px-0.5 py-1.5 outline-none ${
+        props.className ?? ""
+      }`}
       style={{
-        ...inputBase,
-        resize: "none",
-        borderBottom: `1.5px solid ${focused ? props.accent : line}`,
+        color: ink,
+        borderBottom: `1.5px solid ${focused ? accent : line}`,
         transition: "border-color 120ms",
+        ...props.style,
       }}
     />
   );
 }
 
-function AddButton({ accent, children, ...rest }) {
+function AddButton({
+  accent,
+  children,
+  ...rest
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  accent: string;
+}) {
   return (
     <button
       {...rest}
-      className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-semibold text-sm mt-1"
-      style={{ background: accent, color: "#12141C" }}
+      className={`flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 ${
+        rest.className ?? ""
+      }`}
+      style={{ background: accent, color: bg, ...rest.style }}
     >
       <Plus size={16} strokeWidth={2.5} />
       {children}
@@ -132,20 +256,31 @@ function AddButton({ accent, children, ...rest }) {
   );
 }
 
-function EntryRow({ children, onDelete }) {
-  const [hover, setHover] = useState(false);
+function Empty({ text }: { text: string }) {
+  return (
+    <p className="py-10 text-center text-sm" style={{ color: muted }}>
+      {text}
+    </p>
+  );
+}
+
+function EntryRow({
+  children,
+  onDelete,
+}: {
+  children: ReactNode;
+  onDelete: () => void;
+}) {
   return (
     <div
       className="flex items-start justify-between gap-3 py-3.5"
       style={{ borderBottom: `1px solid ${line}` }}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
     >
-      <div className="flex-1 min-w-0">{children}</div>
+      <div className="min-w-0 flex-1">{children}</div>
       <button
         onClick={onDelete}
-        style={{ color: hover ? "#D9695F" : "transparent" }}
-        className="p-1 shrink-0 transition-colors"
+        className="shrink-0 rounded p-1"
+        style={{ color: muted }}
         aria-label="ลบรายการนี้"
       >
         <Trash2 size={15} />
@@ -154,139 +289,189 @@ function EntryRow({ children, onDelete }) {
   );
 }
 
-function Empty({ text }) {
-  return (
-    <p className="text-sm py-10 text-center" style={{ color: muted }}>
-      {text}
-    </p>
-  );
-}
+/* ---------------- Home ---------------- */
 
-// ---------------- Home ----------------
-function Home({ onSelect }) {
-  const tiles = [
-    { key: "hoops", icon: Activity, label: "ซ้อมบาส", sub: "บันทึกการซ้อม ยิง เข้า", accent: accents.hoops },
-    { key: "workout", icon: Dumbbell, label: "ออกกำลังกาย", sub: "วิ่ง เวท โยคะ และอื่นๆ", accent: accents.workout },
-    { key: "study", icon: BookOpen, label: "จดการเรียน", sub: "เช็กงานค้างแยกตามวิชา", accent: accents.study },
-    { key: "money", icon: Wallet, label: "รายรับ-รายจ่าย", sub: "เงินเข้า เงินออก ยอดคงเหลือ", accent: accents.money },
-    { key: "chores", icon: HomeIcon, label: "งานบ้าน", sub: "เช็กงานบ้านแต่ละวันในสัปดาห์", accent: accents.chores },
-    { key: "stats", icon: BarChart3, label: "สรุปสัปดาห์", sub: "ภาพรวมทุกหมวดทั้ง 7 วัน", accent: accents.stats },
+function Home({ onSelect }: { onSelect: (view: View) => void }) {
+  const tiles: {
+    key: View;
+    icon: ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
+    label: string;
+    sub: string;
+    accent: string;
+  }[] = [
+    {
+      key: "hoops",
+      icon: Activity,
+      label: "ซ้อมบาส",
+      sub: "บันทึกการซ้อม ยิงเข้า",
+      accent: accents.hoops,
+    },
+    {
+      key: "workout",
+      icon: Dumbbell,
+      label: "ออกกำลังกาย",
+      sub: "วิ่ง เวท โยคะ และอื่น ๆ",
+      accent: accents.workout,
+    },
+    {
+      key: "study",
+      icon: BookOpen,
+      label: "จดการเรียน",
+      sub: "เช็กงานค้างแยกตามวิชา",
+      accent: accents.study,
+    },
+    {
+      key: "money",
+      icon: Wallet,
+      label: "รายรับ-รายจ่าย",
+      sub: "เงินเข้า เงินออก ยอดคงเหลือ",
+      accent: accents.money,
+    },
+    {
+      key: "chores",
+      icon: HomeIcon,
+      label: "งานบ้าน",
+      sub: "เช็กงานบ้านแต่ละวัน",
+      accent: accents.chores,
+    },
+    {
+      key: "stats",
+      icon: BarChart3,
+      label: "สรุปสัปดาห์",
+      sub: "ภาพรวมทุกหมวด 7 วัน",
+      accent: accents.stats,
+    },
   ];
+
   return (
-    <div className="w-full max-w-md mx-auto px-6 pt-14 pb-10">
-      <p className="text-sm mb-1" style={{ color: muted }}>
+    <main className="mx-auto w-full max-w-md px-6 pb-10 pt-14">
+      <p className="mb-1 text-sm" style={{ color: muted }}>
         วันนี้อยากจดอะไร
       </p>
-      <h1 className="text-3xl font-black tracking-tight mb-9" style={{ color: ink }}>
+      <h1 className="mb-9 text-3xl font-black tracking-tight" style={{ color: ink }}>
         จดไว้
       </h1>
+
       <div className="grid grid-cols-2 gap-3.5">
-        {tiles.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => onSelect(t.key)}
-            className="text-left rounded-2xl p-4 flex flex-col gap-6 transition-transform active:scale-[0.97]"
-            style={{ background: surface, border: `1px solid ${line}`, minHeight: 148 }}
-          >
-            <t.icon size={22} color={t.accent} strokeWidth={2} />
-            <div>
-              <div className="font-semibold text-sm mb-1" style={{ color: ink }}>
-                {t.label}
+        {tiles.map((tile) => {
+          const Icon = tile.icon;
+          return (
+            <button
+              key={tile.key}
+              onClick={() => onSelect(tile.key)}
+              className="flex min-h-[148px] flex-col justify-between rounded-2xl p-4 text-left transition-transform active:scale-[0.97]"
+              style={{ background: surface, border: `1px solid ${line}` }}
+            >
+              <Icon size={22} color={tile.accent} strokeWidth={2} />
+              <div>
+                <div className="mb-1 text-sm font-semibold" style={{ color: ink }}>
+                  {tile.label}
+                </div>
+                <div className="text-xs leading-snug" style={{ color: muted }}>
+                  {tile.sub}
+                </div>
               </div>
-              <div className="text-xs leading-snug" style={{ color: muted }}>
-                {t.sub}
-              </div>
-            </div>
-          </button>
-        ))}
+            </button>
+          );
+        })}
       </div>
-    </div>
+    </main>
   );
 }
 
-// ---------------- Basketball ----------------
-const WEEKDAY_NAMES = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์", "อาทิตย์"];
+/* ---------------- Basketball ---------------- */
 
-function getWeekDates() {
-  const now = new Date();
-  const day = now.getDay(); // 0 = Sun .. 6 = Sat
-  const diffToMonday = day === 0 ? -6 : 1 - day;
-  const monday = new Date(now);
-  monday.setDate(now.getDate() + diffToMonday);
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return { date: d.toISOString().slice(0, 10), dayName: WEEKDAY_NAMES[i] };
-  });
-}
+type HoopDay = {
+  id: string;
+  date: string;
+  dayName: string;
+  made: string;
+  attempts: string;
+  note: string;
+  extra?: boolean;
+};
 
-function shortDate(iso) {
-  if (!iso) return "";
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("th-TH", { day: "numeric", month: "short" });
-}
-
-function HoopsScreen({ onBack }) {
+function HoopsScreen({ onBack }: { onBack: () => void }) {
   const accent = accents.hoops;
-  const [days, setDays] = useState([]);
+  const [days, setDays] = useState<HoopDay[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    loadList("hoops-log").then((stored) => {
-      const week = getWeekDates().map((w) => {
-        const existing = stored.find((e) => e.date === w.date && !e.extra);
-        return existing || { id: uid(), date: w.date, dayName: w.dayName, made: "", attempts: "", note: "", extra: false };
-      });
-      const extras = stored.filter((e) => e.extra);
-      setDays([...week, ...extras]);
-      setLoaded(true);
+    const stored = loadList<HoopDay>("hoops-log");
+    const week = getWeekDates().map((w) => {
+      const existing = stored.find((e) => e.date === w.date && !e.extra);
+      return (
+        existing ?? {
+          id: uid(),
+          date: w.date,
+          dayName: w.dayName,
+          made: "",
+          attempts: "",
+          note: "",
+          extra: false,
+        }
+      );
     });
+    setDays([...week, ...stored.filter((e) => e.extra)]);
+    setLoaded(true);
   }, []);
 
-  const updateDay = (id, patch) => {
+  const updateDay = (id: string, patch: Partial<HoopDay>) => {
     setDays((prev) => {
       const next = prev.map((d) => (d.id === id ? { ...d, ...patch } : d));
-      saveList("hoops-log", next);
-      return next;
+      return saveAndReturn("hoops-log", next);
     });
   };
 
   const addExtraDay = () => {
-    setDays((prev) => {
-      const next = [...prev, { id: uid(), date: todayISO(), dayName: "", made: "", attempts: "", note: "", extra: true }];
-      saveList("hoops-log", next);
-      return next;
-    });
+    setDays((prev) =>
+      saveAndReturn("hoops-log", [
+        ...prev,
+        {
+          id: uid(),
+          date: todayISO(),
+          dayName: "",
+          made: "",
+          attempts: "",
+          note: "",
+          extra: true,
+        },
+      ])
+    );
   };
 
-  const removeDay = (id) => {
-    setDays((prev) => {
-      const next = prev.filter((d) => d.id !== id);
-      saveList("hoops-log", next);
-      return next;
-    });
+  const removeDay = (id: string) => {
+    setDays((prev) => saveAndReturn("hoops-log", prev.filter((d) => d.id !== id)));
   };
 
   return (
-    <div className="w-full max-w-md mx-auto px-6 pt-8 pb-10">
+    <main className="mx-auto w-full max-w-md px-6 pb-10 pt-8">
       <TopBar title="ซ้อมบาส" accent={accent} onBack={onBack} />
 
       {loaded &&
         days.map((d) => {
-          const pct = Number(d.attempts) > 0 ? Math.round((Number(d.made) / Number(d.attempts)) * 100) : null;
+          const attempts = Number(d.attempts);
+          const made = Number(d.made);
+          const pct = attempts > 0 ? Math.round((made / attempts) * 100) : null;
+
           return (
-            <div key={d.id} className="rounded-2xl p-4 mb-3" style={{ background: surface, border: `1px solid ${line}` }}>
-              <div className="flex items-center gap-2 mb-3">
+            <section
+              key={d.id}
+              className="mb-3 rounded-2xl p-4"
+              style={{ background: surface, border: `1px solid ${line}` }}
+            >
+              <div className="mb-3 flex items-center gap-2">
                 {d.extra ? (
                   <input
                     type="date"
                     value={d.date}
                     onChange={(e) => updateDay(d.id, { date: e.target.value })}
-                    style={{ background: "transparent", color: ink, border: "none", outline: "none", fontSize: "0.85rem", fontWeight: 600 }}
+                    className="bg-transparent text-sm font-semibold outline-none"
+                    style={{ color: ink }}
                   />
                 ) : (
                   <>
-                    <span className="font-semibold text-sm" style={{ color: ink }}>
+                    <span className="text-sm font-semibold" style={{ color: ink }}>
                       วัน{d.dayName}
                     </span>
                     <span className="text-xs" style={{ color: muted }}>
@@ -294,13 +479,20 @@ function HoopsScreen({ onBack }) {
                     </span>
                   </>
                 )}
+
                 {pct !== null && (
-                  <span className="text-xs font-medium ml-auto" style={{ color: accent }}>
+                  <span className="ml-auto text-xs font-medium" style={{ color: accent }}>
                     ยิง {pct}%
                   </span>
                 )}
+
                 {d.extra && (
-                  <button onClick={() => removeDay(d.id)} className="p-1" style={{ color: muted }} aria-label="ลบวันนี้">
+                  <button
+                    onClick={() => removeDay(d.id)}
+                    className="rounded p-1"
+                    style={{ color: muted }}
+                    aria-label="ลบวันนี้"
+                  >
                     <Trash2 size={14} />
                   </button>
                 )}
@@ -328,121 +520,153 @@ function HoopsScreen({ onBack }) {
                   />
                 </Field>
               </div>
+
               <Field label="ทำอะไรบ้าง">
                 <TextareaUnderline
                   accent={accent}
                   rows={2}
                   value={d.note}
                   onChange={(e) => updateDay(d.id, { note: e.target.value })}
-                  placeholder="เช่น ซ้อมชู้ตสามคะแนน วิ่งฟุตเวิร์ก"
+                  placeholder="เช่น ชู้ตสามคะแนน ฟุตเวิร์ก ฝึกเลี้ยงบอล"
                 />
               </Field>
-            </div>
+            </section>
           );
         })}
 
       <button
         onClick={addExtraDay}
-        className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-semibold text-sm mt-1"
+        className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold"
         style={{ border: `1px dashed ${line}`, color: muted }}
       >
         <Plus size={16} strokeWidth={2.5} />
         เพิ่มวัน
       </button>
-    </div>
+    </main>
   );
 }
 
-// ---------------- Workout ----------------
-function newMove() {
+/* ---------------- Workout ---------------- */
+
+type Move = { id: string; move: string; sets: string; reps: string };
+type WorkoutDay = {
+  id: string;
+  date: string;
+  dayName: string;
+  extra?: boolean;
+  moves: Move[];
+};
+
+function newMove(): Move {
   return { id: uid(), move: "", sets: "", reps: "" };
 }
 
-function WorkoutScreen({ onBack }) {
+function WorkoutScreen({ onBack }: { onBack: () => void }) {
   const accent = accents.workout;
-  const [days, setDays] = useState([]);
+  const [days, setDays] = useState<WorkoutDay[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    loadList("workout-log").then((stored) => {
-      const week = getWeekDates().map((w) => {
-        const existing = stored.find((e) => e.date === w.date && !e.extra);
-        return existing || { id: uid(), date: w.date, dayName: w.dayName, extra: false, moves: [newMove()] };
-      });
-      const extras = stored.filter((e) => e.extra);
-      setDays([...week, ...extras]);
-      setLoaded(true);
+    const stored = loadList<WorkoutDay>("workout-log");
+    const week = getWeekDates().map((w) => {
+      const existing = stored.find((e) => e.date === w.date && !e.extra);
+      return (
+        existing ?? {
+          id: uid(),
+          date: w.date,
+          dayName: w.dayName,
+          extra: false,
+          moves: [newMove()],
+        }
+      );
     });
+    setDays([...week, ...stored.filter((e) => e.extra)]);
+    setLoaded(true);
   }, []);
 
-  const updateDayDate = (dayId, value) => {
+  const updateDay = (dayId: string, patch: Partial<WorkoutDay>) => {
     setDays((prev) => {
-      const next = prev.map((d) => (d.id === dayId ? { ...d, date: value } : d));
-      saveList("workout-log", next);
-      return next;
+      const next = prev.map((d) => (d.id === dayId ? { ...d, ...patch } : d));
+      return saveAndReturn("workout-log", next);
     });
   };
 
-  const updateMove = (dayId, moveId, patch) => {
+  const updateMove = (dayId: string, moveId: string, patch: Partial<Move>) => {
     setDays((prev) => {
       const next = prev.map((d) =>
-        d.id === dayId ? { ...d, moves: d.moves.map((m) => (m.id === moveId ? { ...m, ...patch } : m)) } : d
+        d.id === dayId
+          ? {
+              ...d,
+              moves: d.moves.map((m) => (m.id === moveId ? { ...m, ...patch } : m)),
+            }
+          : d
       );
-      saveList("workout-log", next);
-      return next;
+      return saveAndReturn("workout-log", next);
     });
   };
 
-  const addMove = (dayId) => {
+  const addMove = (dayId: string) => {
     setDays((prev) => {
-      const next = prev.map((d) => (d.id === dayId ? { ...d, moves: [...d.moves, newMove()] } : d));
-      saveList("workout-log", next);
-      return next;
+      const next = prev.map((d) =>
+        d.id === dayId ? { ...d, moves: [...d.moves, newMove()] } : d
+      );
+      return saveAndReturn("workout-log", next);
     });
   };
 
-  const removeMove = (dayId, moveId) => {
+  const removeMove = (dayId: string, moveId: string) => {
     setDays((prev) => {
-      const next = prev.map((d) => (d.id === dayId ? { ...d, moves: d.moves.filter((m) => m.id !== moveId) } : d));
-      saveList("workout-log", next);
-      return next;
+      const next = prev.map((d) =>
+        d.id === dayId
+          ? { ...d, moves: d.moves.filter((m) => m.id !== moveId) }
+          : d
+      );
+      return saveAndReturn("workout-log", next);
     });
   };
 
   const addExtraDay = () => {
-    setDays((prev) => {
-      const next = [...prev, { id: uid(), date: todayISO(), dayName: "", extra: true, moves: [newMove()] }];
-      saveList("workout-log", next);
-      return next;
-    });
+    setDays((prev) =>
+      saveAndReturn("workout-log", [
+        ...prev,
+        {
+          id: uid(),
+          date: todayISO(),
+          dayName: "",
+          extra: true,
+          moves: [newMove()],
+        },
+      ])
+    );
   };
 
-  const removeDay = (dayId) => {
-    setDays((prev) => {
-      const next = prev.filter((d) => d.id !== dayId);
-      saveList("workout-log", next);
-      return next;
-    });
+  const removeDay = (dayId: string) => {
+    setDays((prev) => saveAndReturn("workout-log", prev.filter((d) => d.id !== dayId)));
   };
 
   return (
-    <div className="w-full max-w-md mx-auto px-6 pt-8 pb-10">
+    <main className="mx-auto w-full max-w-md px-6 pb-10 pt-8">
       <TopBar title="ออกกำลังกาย" accent={accent} onBack={onBack} />
 
       {loaded &&
         days.map((d) => (
-          <div key={d.id} className="rounded-2xl p-4 mb-3" style={{ background: surface, border: `1px solid ${line}` }}>
-            <div className="flex items-center gap-2 mb-3">
+          <section
+            key={d.id}
+            className="mb-3 rounded-2xl p-4"
+            style={{ background: surface, border: `1px solid ${line}` }}
+          >
+            <div className="mb-3 flex items-center gap-2">
               {d.extra ? (
                 <input
                   type="date"
                   value={d.date}
-                  onChange={(e) => updateDayDate(d.id, e.target.value)}
-                  style={{ background: "transparent", color: ink, border: "none", outline: "none", fontSize: "0.85rem", fontWeight: 600 }}
+                  onChange={(e) => updateDay(d.id, { date: e.target.value })}
+                  className="bg-transparent text-sm font-semibold outline-none"
+                  style={{ color: ink }}
                 />
               ) : (
                 <>
-                  <span className="font-semibold text-sm" style={{ color: ink }}>
+                  <span className="text-sm font-semibold" style={{ color: ink }}>
                     วัน{d.dayName}
                   </span>
                   <span className="text-xs" style={{ color: muted }}>
@@ -450,17 +674,27 @@ function WorkoutScreen({ onBack }) {
                   </span>
                 </>
               )}
+
               {d.extra && (
-                <button onClick={() => removeDay(d.id)} className="ml-auto p-1" style={{ color: muted }} aria-label="ลบวันนี้">
+                <button
+                  onClick={() => removeDay(d.id)}
+                  className="ml-auto rounded p-1"
+                  style={{ color: muted }}
+                  aria-label="ลบวันนี้"
+                >
                   <Trash2 size={14} />
                 </button>
               )}
             </div>
 
             {d.moves.map((m, idx) => (
-              <div key={m.id} className={idx > 0 ? "pt-4 mt-4" : ""} style={idx > 0 ? { borderTop: `1px solid ${line}` } : undefined}>
+              <div
+                key={m.id}
+                className={idx > 0 ? "mt-4 border-t pt-4" : ""}
+                style={idx > 0 ? { borderColor: line } : undefined}
+              >
                 <div className="flex items-start gap-2">
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-0 flex-1">
                     <Field label={idx === 0 ? "ท่าที่จะทำ" : `ท่าที่ ${idx + 1}`}>
                       <Underline
                         accent={accent}
@@ -471,10 +705,11 @@ function WorkoutScreen({ onBack }) {
                       />
                     </Field>
                   </div>
+
                   {d.moves.length > 1 && (
                     <button
                       onClick={() => removeMove(d.id, m.id)}
-                      className="p-1 mt-5"
+                      className="mt-5 rounded p-1"
                       style={{ color: muted }}
                       aria-label="ลบท่านี้"
                     >
@@ -482,6 +717,7 @@ function WorkoutScreen({ onBack }) {
                     </button>
                   )}
                 </div>
+
                 <div className="grid grid-cols-2 gap-x-4">
                   <Field label="เซ็ต">
                     <Underline
@@ -509,119 +745,151 @@ function WorkoutScreen({ onBack }) {
 
             <button
               onClick={() => addMove(d.id)}
-              className="flex items-center gap-1.5 text-xs font-semibold mt-3"
+              className="mt-3 flex items-center gap-1.5 text-xs font-semibold"
               style={{ color: accent }}
             >
               <Plus size={14} strokeWidth={2.5} />
               เพิ่มท่า
             </button>
-          </div>
+          </section>
         ))}
 
       <button
         onClick={addExtraDay}
-        className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-semibold text-sm mt-1"
+        className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold"
         style={{ border: `1px dashed ${line}`, color: muted }}
       >
         <Plus size={16} strokeWidth={2.5} />
         เพิ่มวัน
       </button>
-    </div>
+    </main>
   );
 }
 
-// ---------------- Chores ----------------
-function newChore() {
+/* ---------------- Chores ---------------- */
+
+type Chore = { id: string; name: string; done: boolean };
+type ChoreDay = {
+  id: string;
+  date: string;
+  dayName: string;
+  extra?: boolean;
+  chores: Chore[];
+};
+
+function newChore(): Chore {
   return { id: uid(), name: "", done: false };
 }
 
-function ChoresScreen({ onBack }) {
+function ChoresScreen({ onBack }: { onBack: () => void }) {
   const accent = accents.chores;
-  const [days, setDays] = useState([]);
+  const [days, setDays] = useState<ChoreDay[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    loadList("chores-log").then((stored) => {
-      const week = getWeekDates().map((w) => {
-        const existing = stored.find((e) => e.date === w.date && !e.extra);
-        return existing || { id: uid(), date: w.date, dayName: w.dayName, extra: false, chores: [newChore()] };
-      });
-      const extras = stored.filter((e) => e.extra);
-      setDays([...week, ...extras]);
-      setLoaded(true);
+    const stored = loadList<ChoreDay>("chores-log");
+    const week = getWeekDates().map((w) => {
+      const existing = stored.find((e) => e.date === w.date && !e.extra);
+      return (
+        existing ?? {
+          id: uid(),
+          date: w.date,
+          dayName: w.dayName,
+          extra: false,
+          chores: [newChore()],
+        }
+      );
     });
+    setDays([...week, ...stored.filter((e) => e.extra)]);
+    setLoaded(true);
   }, []);
 
-  const updateDayDate = (dayId, value) => {
+  const updateDay = (dayId: string, patch: Partial<ChoreDay>) => {
     setDays((prev) => {
-      const next = prev.map((d) => (d.id === dayId ? { ...d, date: value } : d));
-      saveList("chores-log", next);
-      return next;
+      const next = prev.map((d) => (d.id === dayId ? { ...d, ...patch } : d));
+      return saveAndReturn("chores-log", next);
     });
   };
 
-  const updateChore = (dayId, choreId, patch) => {
+  const updateChore = (dayId: string, choreId: string, patch: Partial<Chore>) => {
     setDays((prev) => {
       const next = prev.map((d) =>
-        d.id === dayId ? { ...d, chores: d.chores.map((c) => (c.id === choreId ? { ...c, ...patch } : c)) } : d
+        d.id === dayId
+          ? {
+              ...d,
+              chores: d.chores.map((c) => (c.id === choreId ? { ...c, ...patch } : c)),
+            }
+          : d
       );
-      saveList("chores-log", next);
-      return next;
+      return saveAndReturn("chores-log", next);
     });
   };
 
-  const addChore = (dayId) => {
+  const addChore = (dayId: string) => {
     setDays((prev) => {
-      const next = prev.map((d) => (d.id === dayId ? { ...d, chores: [...d.chores, newChore()] } : d));
-      saveList("chores-log", next);
-      return next;
+      const next = prev.map((d) =>
+        d.id === dayId ? { ...d, chores: [...d.chores, newChore()] } : d
+      );
+      return saveAndReturn("chores-log", next);
     });
   };
 
-  const removeChore = (dayId, choreId) => {
+  const removeChore = (dayId: string, choreId: string) => {
     setDays((prev) => {
-      const next = prev.map((d) => (d.id === dayId ? { ...d, chores: d.chores.filter((c) => c.id !== choreId) } : d));
-      saveList("chores-log", next);
-      return next;
+      const next = prev.map((d) =>
+        d.id === dayId
+          ? { ...d, chores: d.chores.filter((c) => c.id !== choreId) }
+          : d
+      );
+      return saveAndReturn("chores-log", next);
     });
   };
 
   const addExtraDay = () => {
-    setDays((prev) => {
-      const next = [...prev, { id: uid(), date: todayISO(), dayName: "", extra: true, chores: [newChore()] }];
-      saveList("chores-log", next);
-      return next;
-    });
+    setDays((prev) =>
+      saveAndReturn("chores-log", [
+        ...prev,
+        {
+          id: uid(),
+          date: todayISO(),
+          dayName: "",
+          extra: true,
+          chores: [newChore()],
+        },
+      ])
+    );
   };
 
-  const removeDay = (dayId) => {
-    setDays((prev) => {
-      const next = prev.filter((d) => d.id !== dayId);
-      saveList("chores-log", next);
-      return next;
-    });
+  const removeDay = (dayId: string) => {
+    setDays((prev) => saveAndReturn("chores-log", prev.filter((d) => d.id !== dayId)));
   };
 
   return (
-    <div className="w-full max-w-md mx-auto px-6 pt-8 pb-10">
+    <main className="mx-auto w-full max-w-md px-6 pb-10 pt-8">
       <TopBar title="งานบ้าน" accent={accent} onBack={onBack} />
 
       {loaded &&
         days.map((d) => {
-          const pending = d.chores.filter((c) => c.name && !c.done).length;
+          const pending = d.chores.filter((c) => c.name.trim() && !c.done).length;
+
           return (
-            <div key={d.id} className="rounded-2xl p-4 mb-3" style={{ background: surface, border: `1px solid ${line}` }}>
-              <div className="flex items-center gap-2 mb-3">
+            <section
+              key={d.id}
+              className="mb-3 rounded-2xl p-4"
+              style={{ background: surface, border: `1px solid ${line}` }}
+            >
+              <div className="mb-3 flex items-center gap-2">
                 {d.extra ? (
                   <input
                     type="date"
                     value={d.date}
-                    onChange={(e) => updateDayDate(d.id, e.target.value)}
-                    style={{ background: "transparent", color: ink, border: "none", outline: "none", fontSize: "0.85rem", fontWeight: 600 }}
+                    onChange={(e) => updateDay(d.id, { date: e.target.value })}
+                    className="bg-transparent text-sm font-semibold outline-none"
+                    style={{ color: ink }}
                   />
                 ) : (
                   <>
-                    <span className="font-semibold text-sm" style={{ color: ink }}>
+                    <span className="text-sm font-semibold" style={{ color: ink }}>
                       วัน{d.dayName}
                     </span>
                     <span className="text-xs" style={{ color: muted }}>
@@ -629,20 +897,31 @@ function ChoresScreen({ onBack }) {
                     </span>
                   </>
                 )}
+
                 {pending > 0 && (
-                  <span className="text-xs font-medium ml-auto" style={{ color: accent }}>
+                  <span className="ml-auto text-xs font-medium" style={{ color: accent }}>
                     ค้าง {pending}
                   </span>
                 )}
+
                 {d.extra && (
-                  <button onClick={() => removeDay(d.id)} className="p-1" style={{ color: muted }} aria-label="ลบวันนี้">
+                  <button
+                    onClick={() => removeDay(d.id)}
+                    className="rounded p-1"
+                    style={{ color: muted }}
+                    aria-label="ลบวันนี้"
+                  >
                     <Trash2 size={14} />
                   </button>
                 )}
               </div>
 
               {d.chores.map((c) => (
-                <div key={c.id} className="flex items-center gap-2.5 py-2" style={{ borderTop: `1px solid ${line}` }}>
+                <div
+                  key={c.id}
+                  className="flex items-center gap-2.5 border-t py-2"
+                  style={{ borderColor: line }}
+                >
                   <button
                     onClick={() => updateChore(d.id, c.id, { done: !c.done })}
                     style={{ color: c.done ? accent : muted }}
@@ -651,23 +930,25 @@ function ChoresScreen({ onBack }) {
                   >
                     {c.done ? <CheckCircle2 size={19} /> : <Circle size={19} />}
                   </button>
+
                   <input
                     type="text"
                     value={c.name}
                     onChange={(e) => updateChore(d.id, c.id, { name: e.target.value })}
                     placeholder="เช่น ล้างจาน, กวาดบ้าน, ซักผ้า"
+                    className="min-w-0 flex-1 bg-transparent text-sm outline-none"
                     style={{
-                      flex: 1,
-                      minWidth: 0,
-                      background: "transparent",
-                      border: "none",
-                      outline: "none",
                       color: c.done ? muted : ink,
                       textDecoration: c.done ? "line-through" : "none",
-                      fontSize: "0.9rem",
                     }}
                   />
-                  <button onClick={() => removeChore(d.id, c.id)} className="p-1 shrink-0" style={{ color: muted }} aria-label="ลบงานนี้">
+
+                  <button
+                    onClick={() => removeChore(d.id, c.id)}
+                    className="shrink-0 rounded p-1"
+                    style={{ color: muted }}
+                    aria-label="ลบงานนี้"
+                  >
                     <Trash2 size={13} />
                   </button>
                 </div>
@@ -675,116 +956,124 @@ function ChoresScreen({ onBack }) {
 
               <button
                 onClick={() => addChore(d.id)}
-                className="flex items-center gap-1.5 text-xs font-semibold mt-3"
+                className="mt-3 flex items-center gap-1.5 text-xs font-semibold"
                 style={{ color: accent }}
               >
                 <Plus size={14} strokeWidth={2.5} />
                 เพิ่มงานบ้าน
               </button>
-            </div>
+            </section>
           );
         })}
 
       <button
         onClick={addExtraDay}
-        className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-semibold text-sm mt-1"
+        className="mt-1 flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold"
         style={{ border: `1px dashed ${line}`, color: muted }}
       >
         <Plus size={16} strokeWidth={2.5} />
         เพิ่มวัน
       </button>
-    </div>
+    </main>
   );
 }
 
-// ---------------- Study ----------------
-function newTask() {
+/* ---------------- Study ---------------- */
+
+type Task = { id: string; name: string; done: boolean };
+type Subject = { id: string; name: string; code: string; tasks: Task[] };
+
+function newTask(): Task {
   return { id: uid(), name: "", done: false };
 }
-function newSubject() {
+
+function newSubject(): Subject {
   return { id: uid(), name: "", code: "", tasks: [newTask()] };
 }
 
-function StudyScreen({ onBack }) {
+function StudyScreen({ onBack }: { onBack: () => void }) {
   const accent = accents.study;
-  const [subjects, setSubjects] = useState([]);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    loadList("study-log").then((stored) => {
-      setSubjects(stored.length ? stored : [newSubject()]);
-      setLoaded(true);
-    });
+    const stored = loadList<Subject>("study-log");
+    setSubjects(stored.length ? stored : [newSubject()]);
+    setLoaded(true);
   }, []);
 
-  const updateSubject = (id, patch) => {
+  const updateSubject = (id: string, patch: Partial<Subject>) => {
     setSubjects((prev) => {
       const next = prev.map((s) => (s.id === id ? { ...s, ...patch } : s));
-      saveList("study-log", next);
-      return next;
+      return saveAndReturn("study-log", next);
     });
   };
 
   const addSubject = () => {
-    setSubjects((prev) => {
-      const next = [...prev, newSubject()];
-      saveList("study-log", next);
-      return next;
-    });
+    setSubjects((prev) => saveAndReturn("study-log", [...prev, newSubject()]));
   };
 
-  const removeSubject = (id) => {
-    setSubjects((prev) => {
-      const next = prev.filter((s) => s.id !== id);
-      saveList("study-log", next);
-      return next;
-    });
+  const removeSubject = (id: string) => {
+    setSubjects((prev) => saveAndReturn("study-log", prev.filter((s) => s.id !== id)));
   };
 
-  const updateTask = (subjectId, taskId, patch) => {
+  const updateTask = (subjectId: string, taskId: string, patch: Partial<Task>) => {
     setSubjects((prev) => {
       const next = prev.map((s) =>
-        s.id === subjectId ? { ...s, tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, ...patch } : t)) } : s
+        s.id === subjectId
+          ? {
+              ...s,
+              tasks: s.tasks.map((t) => (t.id === taskId ? { ...t, ...patch } : t)),
+            }
+          : s
       );
-      saveList("study-log", next);
-      return next;
+      return saveAndReturn("study-log", next);
     });
   };
 
-  const addTask = (subjectId) => {
+  const addTask = (subjectId: string) => {
     setSubjects((prev) => {
-      const next = prev.map((s) => (s.id === subjectId ? { ...s, tasks: [...s.tasks, newTask()] } : s));
-      saveList("study-log", next);
-      return next;
+      const next = prev.map((s) =>
+        s.id === subjectId ? { ...s, tasks: [...s.tasks, newTask()] } : s
+      );
+      return saveAndReturn("study-log", next);
     });
   };
 
-  const removeTask = (subjectId, taskId) => {
+  const removeTask = (subjectId: string, taskId: string) => {
     setSubjects((prev) => {
-      const next = prev.map((s) => (s.id === subjectId ? { ...s, tasks: s.tasks.filter((t) => t.id !== taskId) } : s));
-      saveList("study-log", next);
-      return next;
+      const next = prev.map((s) =>
+        s.id === subjectId
+          ? { ...s, tasks: s.tasks.filter((t) => t.id !== taskId) }
+          : s
+      );
+      return saveAndReturn("study-log", next);
     });
   };
 
   return (
-    <div className="w-full max-w-md mx-auto px-6 pt-8 pb-10">
+    <main className="mx-auto w-full max-w-md px-6 pb-10 pt-8">
       <TopBar title="จดการเรียน" accent={accent} onBack={onBack} />
 
       {loaded &&
         subjects.map((s) => {
-          const pending = s.tasks.filter((t) => t.name && !t.done).length;
+          const pending = s.tasks.filter((t) => t.name.trim() && !t.done).length;
+
           return (
-            <div key={s.id} className="rounded-2xl p-4 mb-3" style={{ background: surface, border: `1px solid ${line}` }}>
-              <div className="flex items-start gap-2 mb-1">
-                <div className="flex-1 grid grid-cols-2 gap-x-4">
+            <section
+              key={s.id}
+              className="mb-3 rounded-2xl p-4"
+              style={{ background: surface, border: `1px solid ${line}` }}
+            >
+              <div className="mb-1 flex items-start gap-2">
+                <div className="grid min-w-0 flex-1 grid-cols-2 gap-x-4">
                   <Field label="ชื่อวิชา">
                     <Underline
                       accent={accent}
                       type="text"
                       value={s.name}
                       onChange={(e) => updateSubject(s.id, { name: e.target.value })}
-                      placeholder="แคลคูลัส"
+                      placeholder="คณิตศาสตร์"
                     />
                   </Field>
                   <Field label="รหัสวิชา">
@@ -797,19 +1086,29 @@ function StudyScreen({ onBack }) {
                     />
                   </Field>
                 </div>
-                <button onClick={() => removeSubject(s.id)} className="p-1 mt-5" style={{ color: muted }} aria-label="ลบวิชานี้">
+
+                <button
+                  onClick={() => removeSubject(s.id)}
+                  className="mt-5 rounded p-1"
+                  style={{ color: muted }}
+                  aria-label="ลบวิชานี้"
+                >
                   <Trash2 size={15} />
                 </button>
               </div>
 
               {pending > 0 && (
-                <p className="text-xs mb-1" style={{ color: accent }}>
-                  ขาดอยู่ {pending} งาน
+                <p className="mb-1 text-xs" style={{ color: accent }}>
+                  ค้างอยู่ {pending} งาน
                 </p>
               )}
 
               {s.tasks.map((t) => (
-                <div key={t.id} className="flex items-center gap-2.5 py-2" style={{ borderTop: `1px solid ${line}` }}>
+                <div
+                  key={t.id}
+                  className="flex items-center gap-2.5 border-t py-2"
+                  style={{ borderColor: line }}
+                >
                   <button
                     onClick={() => updateTask(s.id, t.id, { done: !t.done })}
                     style={{ color: t.done ? accent : muted }}
@@ -818,23 +1117,25 @@ function StudyScreen({ onBack }) {
                   >
                     {t.done ? <CheckCircle2 size={19} /> : <Circle size={19} />}
                   </button>
+
                   <input
                     type="text"
                     value={t.name}
                     onChange={(e) => updateTask(s.id, t.id, { name: e.target.value })}
                     placeholder="ชื่องาน"
+                    className="min-w-0 flex-1 bg-transparent text-sm outline-none"
                     style={{
-                      flex: 1,
-                      minWidth: 0,
-                      background: "transparent",
-                      border: "none",
-                      outline: "none",
                       color: t.done ? muted : ink,
                       textDecoration: t.done ? "line-through" : "none",
-                      fontSize: "0.9rem",
                     }}
                   />
-                  <button onClick={() => removeTask(s.id, t.id)} className="p-1 shrink-0" style={{ color: muted }} aria-label="ลบงานนี้">
+
+                  <button
+                    onClick={() => removeTask(s.id, t.id)}
+                    className="shrink-0 rounded p-1"
+                    style={{ color: muted }}
+                    aria-label="ลบงานนี้"
+                  >
                     <Trash2 size={13} />
                   </button>
                 </div>
@@ -842,53 +1143,94 @@ function StudyScreen({ onBack }) {
 
               <button
                 onClick={() => addTask(s.id)}
-                className="flex items-center gap-1.5 text-xs font-semibold mt-3"
+                className="mt-3 flex items-center gap-1.5 text-xs font-semibold"
                 style={{ color: accent }}
               >
                 <Plus size={14} strokeWidth={2.5} />
                 เพิ่มงาน
               </button>
-            </div>
+            </section>
           );
         })}
 
       <button
         onClick={addSubject}
-        className="w-full flex items-center justify-center gap-2 rounded-xl py-3 font-semibold text-sm mt-1"
+        className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-semibold"
         style={{ border: `1px dashed ${line}`, color: muted }}
       >
         <Plus size={16} strokeWidth={2.5} />
         เพิ่มวิชา
       </button>
-    </div>
+    </main>
   );
 }
 
-// ---------------- Finance ----------------
-function MoneyScreen({ onBack }) {
+/* ---------------- Finance ---------------- */
+
+type MoneyEntry = {
+  id: string;
+  date: string;
+  kind: "income" | "expense";
+  amount: number;
+  category: string;
+  note: string;
+};
+
+type Favorite = {
+  id: string;
+  name: string;
+  amount: string;
+  kind: "income" | "expense";
+  category: string;
+};
+
+function MoneyScreen({ onBack }: { onBack: () => void }) {
   const accent = accents.money;
-  const [entries, setEntries] = useState([]);
+  const [entries, setEntries] = useState<MoneyEntry[]>([]);
+  const [favorites, setFavorites] = useState<Favorite[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [date, setDate] = useState(todayISO());
-  const [kind, setKind] = useState("income");
+  const [kind, setKind] = useState<"income" | "expense">("income");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [note, setNote] = useState("");
-  const [favorites, setFavorites] = useState([]);
   const [editingFavs, setEditingFavs] = useState(false);
 
   useEffect(() => {
-    loadList("finance-log").then((l) => {
-      setEntries(l);
-      setLoaded(true);
-    });
-    loadList("finance-favorites").then(setFavorites);
+    setEntries(loadList<MoneyEntry>("finance-log"));
+    setFavorites(loadList<Favorite>("finance-favorites"));
+    setLoaded(true);
   }, []);
 
+  const totalIncome = useMemo(
+    () => entries.filter((e) => e.kind === "income").reduce((sum, e) => sum + e.amount, 0),
+    [entries]
+  );
+  const totalExpense = useMemo(
+    () => entries.filter((e) => e.kind === "expense").reduce((sum, e) => sum + e.amount, 0),
+    [entries]
+  );
+  const balance = totalIncome - totalExpense;
+
+  const fmt = (n: number) =>
+    n.toLocaleString("th-TH", { maximumFractionDigits: 2 });
+
   const add = () => {
-    const amt = Number(amount);
-    if (!amt) return;
-    const next = [{ id: uid(), date, kind, amount: amt, category, note }, ...entries];
+    const numeric = Number(amount);
+    if (!Number.isFinite(numeric) || numeric <= 0) return;
+
+    const next: MoneyEntry[] = [
+      {
+        id: uid(),
+        date,
+        kind,
+        amount: numeric,
+        category: category.trim(),
+        note: note.trim(),
+      },
+      ...entries,
+    ];
+
     setEntries(next);
     saveList("finance-log", next);
     setAmount("");
@@ -896,72 +1238,84 @@ function MoneyScreen({ onBack }) {
     setNote("");
   };
 
-  const remove = (id) => {
+  const remove = (id: string) => {
     const next = entries.filter((e) => e.id !== id);
     setEntries(next);
     saveList("finance-log", next);
   };
 
-  const quickAdd = (fav) => {
-    const amt = Number(fav.amount);
-    if (!amt) return;
-    const next = [{ id: uid(), date: todayISO(), kind: fav.kind, amount: amt, category: fav.category, note: fav.name }, ...entries];
+  const quickAdd = (fav: Favorite) => {
+    const numeric = Number(fav.amount);
+    if (!Number.isFinite(numeric) || numeric <= 0) return;
+
+    const next: MoneyEntry[] = [
+      {
+        id: uid(),
+        date: todayISO(),
+        kind: fav.kind,
+        amount: numeric,
+        category: fav.category,
+        note: fav.name,
+      },
+      ...entries,
+    ];
+
     setEntries(next);
     saveList("finance-log", next);
   };
 
-  const updateFav = (id, patch) => {
+  const updateFav = (id: string, patch: Partial<Favorite>) => {
     setFavorites((prev) => {
       const next = prev.map((f) => (f.id === id ? { ...f, ...patch } : f));
-      saveList("finance-favorites", next);
-      return next;
+      return saveAndReturn("finance-favorites", next);
     });
   };
 
   const addFav = () => {
-    setFavorites((prev) => {
-      const next = [...prev, { id: uid(), name: "", amount: "", kind: "expense", category: "" }];
-      saveList("finance-favorites", next);
-      return next;
-    });
+    setFavorites((prev) =>
+      saveAndReturn("finance-favorites", [
+        ...prev,
+        { id: uid(), name: "", amount: "", kind: "expense", category: "" },
+      ])
+    );
   };
 
-  const removeFav = (id) => {
-    setFavorites((prev) => {
-      const next = prev.filter((f) => f.id !== id);
-      saveList("finance-favorites", next);
-      return next;
-    });
+  const removeFav = (id: string) => {
+    setFavorites((prev) =>
+      saveAndReturn("finance-favorites", prev.filter((f) => f.id !== id))
+    );
   };
-
-  const totalIncome = entries.filter((e) => e.kind === "income").reduce((s, e) => s + e.amount, 0);
-  const totalExpense = entries.filter((e) => e.kind === "expense").reduce((s, e) => s + e.amount, 0);
-  const balance = totalIncome - totalExpense;
-  const fmt = (n) => n.toLocaleString("th-TH", { maximumFractionDigits: 2 });
 
   return (
-    <div className="w-full max-w-md mx-auto px-6 pt-8 pb-10">
+    <main className="mx-auto w-full max-w-md px-6 pb-10 pt-8">
       <TopBar title="รายรับ-รายจ่าย" accent={accent} onBack={onBack} />
 
       <div className="mb-7">
-        <p className="text-xs mb-1" style={{ color: muted }}>
+        <p className="mb-1 text-xs" style={{ color: muted }}>
           ยอดคงเหลือ
         </p>
-        <p className="text-4xl font-black tracking-tight" style={{ color: balance >= 0 ? ink : "#D9695F" }}>
+        <p
+          className="text-4xl font-black tracking-tight"
+          style={{ color: balance >= 0 ? ink : "#D9695F" }}
+        >
           ฿{fmt(balance)}
         </p>
-        <div className="flex gap-5 mt-2 text-xs">
+        <div className="mt-2 flex gap-5 text-xs">
           <span style={{ color: accents.workout }}>รับ ฿{fmt(totalIncome)}</span>
           <span style={{ color: "#D9695F" }}>จ่าย ฿{fmt(totalExpense)}</span>
         </div>
       </div>
 
       <div className="mb-7">
-        <div className="flex items-center justify-between mb-3">
+        <div className="mb-3 flex items-center justify-between">
           <p className="text-xs" style={{ color: muted }}>
             รายการโปรด
           </p>
-          <button onClick={() => setEditingFavs((v) => !v)} className="text-xs font-semibold" style={{ color: accent }}>
+          <button
+            onClick={() => setEditingFavs((v) => !v)}
+            className="text-xs font-semibold"
+            style={{ color: accent }}
+          >
             {editingFavs ? "เสร็จ" : "แก้ไข"}
           </button>
         </div>
@@ -969,7 +1323,7 @@ function MoneyScreen({ onBack }) {
         {!editingFavs &&
           (favorites.length === 0 ? (
             <p className="text-xs" style={{ color: muted }}>
-              ยังไม่มีรายการโปรด กด "แก้ไข" เพื่อเพิ่มของที่ซื้อราคาเดิมทุกวัน
+              ยังไม่มีรายการโปรด กด “แก้ไข” เพื่อเพิ่มรายการที่ใช้บ่อย
             </p>
           ) : (
             <div className="flex flex-wrap gap-2">
@@ -977,13 +1331,18 @@ function MoneyScreen({ onBack }) {
                 <button
                   key={f.id}
                   onClick={() => quickAdd(f)}
-                  className="px-3.5 py-2.5 rounded-xl text-left"
+                  className="rounded-xl px-3.5 py-2.5 text-left"
                   style={{ background: surface, border: `1px solid ${line}` }}
                 >
                   <div className="text-xs font-medium" style={{ color: ink }}>
                     {f.name || "ไม่มีชื่อ"}
                   </div>
-                  <div className="text-xs" style={{ color: f.kind === "income" ? accents.workout : "#D9695F" }}>
+                  <div
+                    className="text-xs"
+                    style={{
+                      color: f.kind === "income" ? accents.workout : "#D9695F",
+                    }}
+                  >
                     {f.kind === "income" ? "+" : "-"}฿{fmt(Number(f.amount) || 0)}
                   </div>
                 </button>
@@ -994,32 +1353,50 @@ function MoneyScreen({ onBack }) {
         {editingFavs && (
           <div className="flex flex-col gap-3">
             {favorites.map((f) => (
-              <div key={f.id} className="rounded-xl p-3" style={{ background: surface, border: `1px solid ${line}` }}>
-                <div className="flex gap-2 mb-3">
+              <div
+                key={f.id}
+                className="rounded-xl p-3"
+                style={{ background: surface, border: `1px solid ${line}` }}
+              >
+                <div className="mb-3 flex gap-2">
                   {[
-                    { key: "income", label: "รายรับ" },
-                    { key: "expense", label: "รายจ่าย" },
-                  ].map((k) => (
+                    { key: "income" as const, label: "รายรับ" },
+                    { key: "expense" as const, label: "รายจ่าย" },
+                  ].map((option) => (
                     <button
-                      key={k.key}
-                      onClick={() => updateFav(f.id, { kind: k.key })}
-                      className="flex-1 py-1.5 rounded-lg text-xs font-semibold"
+                      key={option.key}
+                      onClick={() => updateFav(f.id, { kind: option.key })}
+                      className="flex-1 rounded-lg py-1.5 text-xs font-semibold"
                       style={{
-                        background: f.kind === k.key ? accent : "transparent",
-                        color: f.kind === k.key ? "#12141C" : muted,
-                        border: `1px solid ${f.kind === k.key ? accent : line}`,
+                        background: f.kind === option.key ? accent : "transparent",
+                        color: f.kind === option.key ? bg : muted,
+                        border: `1px solid ${
+                          f.kind === option.key ? accent : line
+                        }`,
                       }}
                     >
-                      {k.label}
+                      {option.label}
                     </button>
                   ))}
-                  <button onClick={() => removeFav(f.id)} className="p-1.5" style={{ color: muted }} aria-label="ลบรายการโปรดนี้">
+                  <button
+                    onClick={() => removeFav(f.id)}
+                    className="rounded p-1.5"
+                    style={{ color: muted }}
+                    aria-label="ลบรายการโปรด"
+                  >
                     <Trash2 size={14} />
                   </button>
                 </div>
+
                 <div className="grid grid-cols-2 gap-x-4">
                   <Field label="ชื่อ">
-                    <Underline accent={accent} type="text" value={f.name} onChange={(e) => updateFav(f.id, { name: e.target.value })} placeholder="กาแฟ" />
+                    <Underline
+                      accent={accent}
+                      type="text"
+                      value={f.name}
+                      onChange={(e) => updateFav(f.id, { name: e.target.value })}
+                      placeholder="กาแฟ"
+                    />
                   </Field>
                   <Field label="จำนวนเงิน (บาท)">
                     <Underline
@@ -1032,6 +1409,7 @@ function MoneyScreen({ onBack }) {
                     />
                   </Field>
                 </div>
+
                 <Field label="หมวดหมู่ (ไม่บังคับ)">
                   <Underline
                     accent={accent}
@@ -1043,9 +1421,10 @@ function MoneyScreen({ onBack }) {
                 </Field>
               </div>
             ))}
+
             <button
               onClick={addFav}
-              className="w-full flex items-center justify-center gap-2 rounded-xl py-2.5 font-semibold text-xs"
+              className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold"
               style={{ border: `1px dashed ${line}`, color: muted }}
             >
               <Plus size={14} strokeWidth={2.5} />
@@ -1055,50 +1434,87 @@ function MoneyScreen({ onBack }) {
         )}
       </div>
 
-      <div className="rounded-2xl p-4 mb-8" style={{ background: surface, border: `1px solid ${line}` }}>
-        <div className="flex gap-2 mb-4">
+      <div
+        className="mb-8 rounded-2xl p-4"
+        style={{ background: surface, border: `1px solid ${line}` }}
+      >
+        <div className="mb-4 flex gap-2">
           {[
-            { key: "income", label: "รายรับ" },
-            { key: "expense", label: "รายจ่าย" },
-          ].map((k) => (
+            { key: "income" as const, label: "รายรับ" },
+            { key: "expense" as const, label: "รายจ่าย" },
+          ].map((option) => (
             <button
-              key={k.key}
-              onClick={() => setKind(k.key)}
-              className="flex-1 py-2 rounded-lg text-sm font-semibold"
+              key={option.key}
+              onClick={() => setKind(option.key)}
+              className="flex-1 rounded-lg py-2 text-sm font-semibold"
               style={{
-                background: kind === k.key ? accent : "transparent",
-                color: kind === k.key ? "#12141C" : muted,
-                border: `1px solid ${kind === k.key ? accent : line}`,
+                background: kind === option.key ? accent : "transparent",
+                color: kind === option.key ? bg : muted,
+                border: `1px solid ${kind === option.key ? accent : line}`,
               }}
             >
-              {k.label}
+              {option.label}
             </button>
           ))}
         </div>
+
         <div className="grid grid-cols-2 gap-x-4">
           <Field label="จำนวนเงิน (บาท)">
-            <Underline accent={accent} type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="150" />
+            <Underline
+              accent={accent}
+              type="number"
+              min="0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="150"
+            />
           </Field>
           <Field label="วันที่">
-            <Underline accent={accent} type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <Underline
+              accent={accent}
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+            />
           </Field>
         </div>
+
         <Field label="หมวดหมู่">
-          <Underline accent={accent} type="text" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="อาหาร, ค่าเดินทาง ฯลฯ" />
+          <Underline
+            accent={accent}
+            type="text"
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            placeholder="อาหาร, ค่าเดินทาง ฯลฯ"
+          />
         </Field>
+
         <Field label="โน้ต (ไม่บังคับ)">
-          <Underline accent={accent} type="text" value={note} onChange={(e) => setNote(e.target.value)} />
+          <Underline
+            accent={accent}
+            type="text"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="รายละเอียดเพิ่มเติม"
+          />
         </Field>
-        <AddButton accent={accent} onClick={add}>
+
+        <AddButton accent={accent} onClick={add} disabled={!Number(amount)}>
           บันทึกรายการ
         </AddButton>
       </div>
 
-      {loaded && entries.length === 0 && <Empty text="ยังไม่มีรายการ เริ่มบันทึกรายการแรกกันเลย" />}
+      {loaded && entries.length === 0 && (
+        <Empty text="ยังไม่มีรายการ เริ่มบันทึกรายการแรกกันเลย" />
+      )}
+
       {entries.map((e) => (
         <EntryRow key={e.id} onDelete={() => remove(e.id)}>
-          <div className="flex items-baseline gap-2 mb-0.5">
-            <span className="font-semibold text-sm" style={{ color: e.kind === "income" ? accents.workout : "#D9695F" }}>
+          <div className="mb-0.5 flex items-baseline gap-2">
+            <span
+              className="text-sm font-semibold"
+              style={{ color: e.kind === "income" ? accents.workout : "#D9695F" }}
+            >
               {e.kind === "income" ? "+" : "-"}฿{fmt(e.amount)}
             </span>
             {e.category && (
@@ -1106,7 +1522,7 @@ function MoneyScreen({ onBack }) {
                 {e.category}
               </span>
             )}
-            <span className="text-xs ml-auto mr-2" style={{ color: muted }}>
+            <span className="ml-auto mr-2 text-xs" style={{ color: muted }}>
               {thaiDate(e.date)}
             </span>
           </div>
@@ -1117,50 +1533,57 @@ function MoneyScreen({ onBack }) {
           )}
         </EntryRow>
       ))}
-    </div>
+    </main>
   );
 }
 
-// ---------------- Weekly summary ----------------
-function StatsScreen({ onBack }) {
+/* ---------------- Weekly summary ---------------- */
+
+function StatsScreen({ onBack }: { onBack: () => void }) {
   const accent = accents.stats;
-  const [hoopsDays, setHoopsDays] = useState([]);
-  const [workoutDays, setWorkoutDays] = useState([]);
-  const [choreDays, setChoreDays] = useState([]);
+  const [hoopsDays, setHoopsDays] = useState<HoopDay[]>([]);
+  const [workoutDays, setWorkoutDays] = useState<WorkoutDay[]>([]);
+  const [choreDays, setChoreDays] = useState<ChoreDay[]>([]);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    Promise.all([loadList("hoops-log"), loadList("workout-log"), loadList("chores-log")]).then(([h, w, c]) => {
-      setHoopsDays(h.filter((d) => !d.extra));
-      setWorkoutDays(w.filter((d) => !d.extra));
-      setChoreDays(c.filter((d) => !d.extra));
-      setLoaded(true);
-    });
+    setHoopsDays(loadList<HoopDay>("hoops-log").filter((d) => !d.extra));
+    setWorkoutDays(loadList<WorkoutDay>("workout-log").filter((d) => !d.extra));
+    setChoreDays(loadList<ChoreDay>("chores-log").filter((d) => !d.extra));
+    setLoaded(true);
   }, []);
 
   const week = getWeekDates();
-  const byDate = (list, date) => list.find((d) => d.date === date);
 
   return (
-    <div className="w-full max-w-md mx-auto px-6 pt-8 pb-10">
+    <main className="mx-auto w-full max-w-md px-6 pb-10 pt-8">
       <TopBar title="สรุปสัปดาห์" accent={accent} onBack={onBack} />
 
       {loaded &&
         week.map((w) => {
-          const hoop = byDate(hoopsDays, w.date);
-          const workout = byDate(workoutDays, w.date);
-          const chore = byDate(choreDays, w.date);
+          const hoop = hoopsDays.find((d) => d.date === w.date);
+          const workout = workoutDays.find((d) => d.date === w.date);
+          const chore = choreDays.find((d) => d.date === w.date);
 
-          const hoopActive = hoop && (Number(hoop.made) > 0 || Number(hoop.attempts) > 0 || hoop.note);
-          const moves = workout ? workout.moves.filter((m) => m.move) : [];
-          const choresAll = chore ? chore.chores.filter((c) => c.name) : [];
+          const hoopActive =
+            !!hoop &&
+            (Number(hoop.made) > 0 ||
+              Number(hoop.attempts) > 0 ||
+              !!hoop.note.trim());
+
+          const moves = workout?.moves.filter((m) => m.move.trim()) ?? [];
+          const choresAll = chore?.chores.filter((c) => c.name.trim()) ?? [];
           const choresDone = choresAll.filter((c) => c.done);
           const hasAnything = hoopActive || moves.length > 0 || choresAll.length > 0;
 
           return (
-            <div key={w.date} className="rounded-2xl p-4 mb-3" style={{ background: surface, border: `1px solid ${line}` }}>
-              <div className="flex items-baseline gap-2 mb-3">
-                <span className="font-semibold text-sm" style={{ color: ink }}>
+            <section
+              key={w.date}
+              className="mb-3 rounded-2xl p-4"
+              style={{ background: surface, border: `1px solid ${line}` }}
+            >
+              <div className="mb-3 flex items-baseline gap-2">
+                <span className="text-sm font-semibold" style={{ color: ink }}>
                   วัน{w.dayName}
                 </span>
                 <span className="text-xs" style={{ color: muted }}>
@@ -1176,24 +1599,47 @@ function StatsScreen({ onBack }) {
                 <div className="flex flex-col gap-2.5">
                   {hoopActive && (
                     <div className="flex gap-2 text-xs">
-                      <Activity size={14} color={accents.hoops} className="shrink-0 mt-0.5" />
+                      <Activity
+                        size={14}
+                        color={accents.hoops}
+                        className="mt-0.5 shrink-0"
+                      />
                       <span style={{ color: muted }}>
-                        ซ้อมบาส{Number(hoop.attempts) > 0 ? ` — ${hoop.made || 0}/${hoop.attempts} เข้า` : ""}
-                        {hoop.note ? ` · ${hoop.note}` : ""}
+                        ซ้อมบาส
+                        {Number(hoop?.attempts) > 0
+                          ? ` — ${hoop?.made || 0}/${hoop?.attempts} เข้า`
+                          : ""}
+                        {hoop?.note ? ` · ${hoop.note}` : ""}
                       </span>
                     </div>
                   )}
+
                   {moves.length > 0 && (
                     <div className="flex gap-2 text-xs">
-                      <Dumbbell size={14} color={accents.workout} className="shrink-0 mt-0.5" />
+                      <Dumbbell
+                        size={14}
+                        color={accents.workout}
+                        className="mt-0.5 shrink-0"
+                      />
                       <span style={{ color: muted }}>
-                        ออกกำลังกาย — {moves.map((m) => m.move + (m.sets && m.reps ? ` (${m.sets}x${m.reps})` : "")).join(", ")}
+                        ออกกำลังกาย —{" "}
+                        {moves
+                          .map((m) =>
+                            m.move +
+                            (m.sets && m.reps ? ` (${m.sets}x${m.reps})` : "")
+                          )
+                          .join(", ")}
                       </span>
                     </div>
                   )}
+
                   {choresAll.length > 0 && (
                     <div className="flex gap-2 text-xs">
-                      <HomeIcon size={14} color={accents.chores} className="shrink-0 mt-0.5" />
+                      <HomeIcon
+                        size={14}
+                        color={accents.chores}
+                        className="mt-0.5 shrink-0"
+                      />
                       <span style={{ color: muted }}>
                         งานบ้าน — เสร็จ {choresDone.length}/{choresAll.length}
                       </span>
@@ -1201,19 +1647,27 @@ function StatsScreen({ onBack }) {
                   )}
                 </div>
               )}
-            </div>
+            </section>
           );
         })}
-    </div>
+    </main>
   );
 }
 
-// ---------------- App ----------------
+/* ---------------- App ---------------- */
+
 export default function App() {
-  const [view, setView] = useState("home");
+  const [view, setView] = useState<View>("home");
 
   return (
-    <div style={{ background: bg, minHeight: "100vh" }} className="font-sans">
+    <div
+      className="min-h-screen font-sans"
+      style={{
+        background: bg,
+        color: ink,
+        minHeight: "100vh",
+      }}
+    >
       {view === "home" && <Home onSelect={setView} />}
       {view === "hoops" && <HoopsScreen onBack={() => setView("home")} />}
       {view === "workout" && <WorkoutScreen onBack={() => setView("home")} />}
