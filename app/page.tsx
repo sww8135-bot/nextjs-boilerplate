@@ -1,3 +1,4 @@
+'use client';
 import { useState, useEffect } from "react";
 import { ArrowLeft, Activity, Dumbbell, BookOpen, Wallet, Plus, Trash2, CheckCircle2, Circle, Home as HomeIcon, BarChart3 } from "lucide-react";
 
